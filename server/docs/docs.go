@@ -136,7 +136,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/auth.User"
+                                            "$ref": "#/definitions/auth.UserView"
                                         }
                                     }
                                 }
@@ -436,7 +436,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/auth.TokenPair"
                 },
                 "user": {
-                    "$ref": "#/definitions/auth.User"
+                    "$ref": "#/definitions/auth.UserView"
                 }
             }
         },
@@ -481,15 +481,28 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "email",
-                "name",
+                "first_name",
+                "last_name",
+                "org_name",
                 "password"
             ],
             "properties": {
                 "email": {
                     "type": "string"
                 },
-                "name": {
+                "first_name": {
                     "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
+                "last_name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
+                "org_name": {
+                    "type": "string",
+                    "maxLength": 100,
                     "minLength": 2
                 },
                 "password": {
@@ -546,25 +559,22 @@ const docTemplate = `{
                 }
             }
         },
-        "auth.User": {
+        "auth.UserView": {
             "type": "object",
             "properties": {
                 "created_at": {
                     "type": "string"
                 },
+                "customer_id": {
+                    "type": "integer"
+                },
                 "email": {
                     "type": "string"
                 },
-                "email_verified": {
-                    "type": "boolean"
-                },
                 "id": {
-                    "type": "string"
+                    "type": "integer"
                 },
-                "name": {
-                    "type": "string"
-                },
-                "updated_at": {
+                "role": {
                     "type": "string"
                 }
             }
@@ -615,8 +625,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/api/v1",
 	Schemes:          []string{"http", "https"},
-	Title:            "Workflow Automation",
-	Description:      "Backend for the Zenith AI coaching app — authentication & notifications.",
+	Title:            "TutorPilot",
+	Description:      "Backend for TutorPilot — authentication & notifications.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

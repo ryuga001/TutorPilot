@@ -2,12 +2,12 @@ package server
 
 import (
 	"net/http"
-	"workflow/internal/config"
-	"workflow/internal/middleware"
-	"workflow/internal/modules/auth"
-	"workflow/internal/modules/notification"
-	"workflow/internal/pkg/jwtutil"
-	"workflow/internal/pkg/mailer"
+	"tutorpilot/internal/config"
+	"tutorpilot/internal/middleware"
+	"tutorpilot/internal/modules/auth"
+	"tutorpilot/internal/modules/notification"
+	"tutorpilot/internal/pkg/jwtutil"
+	"tutorpilot/internal/pkg/mailer"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,9 +25,10 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS(cfg.CORSAllowedOrigins))
 
 	// Shared infrastructure.
-	jwtMgr := jwtutil.New(cfg.JWTSecret, cfg.JWTAccessTTL)
+	jwtMgr := jwtutil.New(cfg.JWTAccessTTL)
 	mail := mailer.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
-	notifier := notification.New(mail, cfg.AppVerifyURL, cfg.OTPTTL)
+	templates := notification.NewTemplateStore(db)
+	notifier := notification.New(mail, templates, cfg.AppVerifyURL, cfg.OTPTTL, notification.SystemTenantID)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -45,7 +46,6 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 		JWT:        jwtMgr,
 		Notifier:   notifier,
 		Pepper:     cfg.PasswordPepper,
-		AccessTTL:  cfg.JWTAccessTTL,
 		RefreshTTL: cfg.JWTRefreshTTL,
 		OTPTTL:     cfg.OTPTTL,
 	})

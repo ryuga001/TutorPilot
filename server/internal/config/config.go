@@ -18,7 +18,6 @@ type Config struct {
 
 	CORSAllowedOrigins []string
 
-	JWTSecret     string
 	JWTAccessTTL  time.Duration
 	JWTRefreshTTL time.Duration
 
@@ -40,11 +39,10 @@ func Load() (*Config, error) {
 		AppPort:            getEnv("APP_PORT", "8080"),
 		DatabaseURL:        getEnv("DATABASE_URL", ""),
 		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379/0"),
-		JWTSecret:          getEnv("JWT_SECRET", ""),
 		PasswordPepper:     getEnv("PASSWORD_PEPPER", ""),
 		SMTPHost:           getEnv("SMTP_HOST", "localhost"),
 		SMTPPort:           getEnv("SMTP_PORT", "1025"),
-		SMTPFrom:           getEnv("SMTP_FROM", "Zenith AI <no-reply@zenith.ai>"),
+		SMTPFrom:           getEnv("SMTP_FROM", "TutorPilot <no-reply@tutorpilot.ai>"),
 		AppVerifyURL:       getEnv("APP_VERIFY_URL", "http://localhost:8080/verify-email"),
 		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "*")),
 	}
@@ -62,9 +60,6 @@ func Load() (*Config, error) {
 
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
-	}
-	if cfg.JWTSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 	if cfg.PasswordPepper == "" {
 		return nil, fmt.Errorf("PASSWORD_PEPPER is required")

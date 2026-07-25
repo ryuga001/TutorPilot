@@ -5,7 +5,7 @@ definitions:
       tokens:
         $ref: '#/definitions/auth.TokenPair'
       user:
-        $ref: '#/definitions/auth.User'
+        $ref: '#/definitions/auth.UserView'
     type: object
   auth.LoginRequest:
     properties:
@@ -35,7 +35,16 @@ definitions:
     properties:
       email:
         type: string
-      name:
+      first_name:
+        maxLength: 50
+        minLength: 1
+        type: string
+      last_name:
+        maxLength: 50
+        minLength: 1
+        type: string
+      org_name:
+        maxLength: 100
         minLength: 2
         type: string
       password:
@@ -43,7 +52,9 @@ definitions:
         type: string
     required:
     - email
-    - name
+    - first_name
+    - last_name
+    - org_name
     - password
     type: object
   auth.ResetPasswordRequest:
@@ -78,19 +89,17 @@ definitions:
       token_type:
         type: string
     type: object
-  auth.User:
+  auth.UserView:
     properties:
       created_at:
         type: string
+      customer_id:
+        type: integer
       email:
         type: string
-      email_verified:
-        type: boolean
       id:
-        type: string
-      name:
-        type: string
-      updated_at:
+        type: integer
+      role:
         type: string
     type: object
   auth.VerifyEmailRequest:
@@ -115,8 +124,8 @@ definitions:
     type: object
 info:
   contact: {}
-  description: Backend for the Zenith AI coaching app — authentication & notifications.
-  title: Workflow Automation
+  description: Backend for TutorPilot — authentication & notifications.
+  title: TutorPilot
   version: "1.0"
 paths:
   /auth/login:
@@ -188,7 +197,7 @@ paths:
             - $ref: '#/definitions/httpx.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/auth.User'
+                  $ref: '#/definitions/auth.UserView'
               type: object
         "401":
           description: Unauthorized

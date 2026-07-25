@@ -1,1 +1,6 @@
-DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS email_templates;
+DROP TABLE IF EXISTS dashboard_users;
+DROP TABLE IF EXISTS role_privileges;
+DROP TABLE IF EXISTS privileges;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS customers;

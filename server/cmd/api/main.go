@@ -10,15 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"workflow/internal/config"
-	"workflow/internal/database"
-	"workflow/internal/redisclient"
-	"workflow/internal/server"
+	"tutorpilot/internal/config"
+	"tutorpilot/internal/database"
+	"tutorpilot/internal/redisclient"
+	"tutorpilot/internal/server"
 )
 
-// @title           Workflow Automation
+// @title           TutorPilot
 // @version         1.0
-// @description     Backend for the Zenith AI coaching app — authentication & notifications.
+// @description     Backend for TutorPilot — authentication & notifications.
 // @BasePath        /api/v1
 // @schemes         http https
 // @securityDefinitions.apikey  BearerAuth
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("zenith api listening on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)
+		log.Printf("tutorpilot api listening on :%s (env=%s)", cfg.AppPort, cfg.AppEnv)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("server: %v", err)
 		}

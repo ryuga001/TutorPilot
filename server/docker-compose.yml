@@ -1,25 +1,25 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: zenith-postgres
+    container_name: tutorpilot-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: zenith
-      POSTGRES_PASSWORD: zenith
-      POSTGRES_DB: workflow
+      POSTGRES_USER: tutorpilot
+      POSTGRES_PASSWORD: tutorpilot
+      POSTGRES_DB: tutorpilot
     ports:
       - "5432:5432"
     volumes:
-      - zenith_pgdata:/var/lib/postgresql/data
+      - tutorpilot_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U zenith -d zenith"]
+      test: ["CMD-SHELL", "pg_isready -U tutorpilot -d tutorpilot"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: zenith-redis
+    container_name: tutorpilot-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -31,11 +31,11 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: zenith-mailpit
+    container_name: tutorpilot-mailpit
     restart: unless-stopped
     ports:
       - "1025:1025"
-      - "8025:8025" 
+      - "8025:8025"
 
 volumes:
-  zenith_pgdata:
+  tutorpilot_pgdata:

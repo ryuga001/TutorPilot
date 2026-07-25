@@ -3,11 +3,12 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
-	"workflow/internal/middleware"
-	"workflow/internal/pkg/httpx"
+	"tutorpilot/internal/middleware"
+	"tutorpilot/internal/pkg/httpx"
 )
 
 type Handler struct {
@@ -41,7 +42,7 @@ func (h *Handler) Register(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrEmailNotVerified):
 			httpx.Fail(c, http.StatusForbidden, err.Error())
-		case errors.Is(err, ErrEmailTaken):
+		case errors.Is(err, ErrEmailTaken), errors.Is(err, ErrOrgTaken):
 			httpx.Fail(c, http.StatusConflict, err.Error())
 		default:
 			httpx.Fail(c, http.StatusInternalServerError, "could not register user")
@@ -228,11 +229,15 @@ func (h *Handler) SendVerification(c *gin.Context) {
 // @Tags         auth
 // @Security     BearerAuth
 // @Produce      json
-// @Success      200  {object}  httpx.Envelope{data=User}
+// @Success      200  {object}  httpx.Envelope{data=UserView}
 // @Failure      401  {object}  httpx.Envelope
 // @Router       /auth/me [get]
 func (h *Handler) GetMe(c *gin.Context) {
-	userID := c.GetString(middleware.CtxUserID)
+	userID, err := strconv.Atoi(c.GetString(middleware.CtxUserID))
+	if err != nil {
+		httpx.Fail(c, http.StatusUnauthorized, "invalid session")
+		return
+	}
 	user, err := h.svc.GetMe(c.Request.Context(), userID)
 	if err != nil {
 		httpx.Fail(c, http.StatusNotFound, "user not found")

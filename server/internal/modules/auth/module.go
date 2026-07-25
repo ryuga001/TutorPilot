@@ -7,13 +7,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"workflow/internal/middleware"
-	"workflow/internal/modules/notification"
-	"workflow/internal/pkg/jwtutil"
+	"tutorpilot/internal/middleware"
+	"tutorpilot/internal/modules/notification"
+	"tutorpilot/internal/pkg/jwtutil"
 )
 
 type Module struct {
 	handler *Handler
+	svc     *Service
 	jwt     *jwtutil.Manager
 }
 
@@ -23,7 +24,6 @@ type Deps struct {
 	JWT        *jwtutil.Manager
 	Notifier   *notification.Notifier
 	Pepper     string
-	AccessTTL  time.Duration
 	RefreshTTL time.Duration
 	OTPTTL     time.Duration
 }
@@ -31,15 +31,24 @@ type Deps struct {
 func New(d Deps) *Module {
 	repo := NewRepository(d.DB)
 	store := NewRedisStore(d.Redis)
-	svc := NewService(repo, store, d.JWT, d.Notifier, d.Pepper,
-		d.AccessTTL, d.RefreshTTL, d.OTPTTL)
-	return &Module{handler: NewHandler(svc), jwt: d.JWT}
+	svc := NewService(repo, store, d.JWT, d.Notifier, d.Pepper, d.RefreshTTL, d.OTPTTL)
+	return &Module{handler: NewHandler(svc), svc: svc, jwt: d.JWT}
+}
+
+// RequireAuth validates the bearer token against the tenant's secret.
+func (m *Module) RequireAuth() gin.HandlerFunc {
+	return middleware.RequireAuth(m.jwt, m.svc.ResolveSecret)
+}
+
+// RequirePrivilege gates a route on a named privilege (run after RequireAuth).
+func (m *Module) RequirePrivilege(privilege string) gin.HandlerFunc {
+	return middleware.RequirePrivilege(m.svc.HasPrivilege, privilege)
 }
 
 func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	g := rg.Group("/auth")
 	{
-		// Email verification comes first, then register.
+		// Email verification comes first, then tenant registration.
 		g.POST("/send-verification", m.handler.SendVerification)
 		g.POST("/resend-verification", m.handler.SendVerification) // alias
 		g.POST("/verify-email", m.handler.VerifyEmail)
@@ -50,7 +59,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		g.POST("/forgot-password", m.handler.ForgotPassword)
 		g.POST("/reset-password", m.handler.ResetPassword)
 
-		g.POST("/logout", middleware.RequireAuth(m.jwt), m.handler.Logout)
-		g.GET("/me", middleware.RequireAuth(m.jwt), m.handler.GetMe)
+		g.POST("/logout", m.RequireAuth(), m.handler.Logout)
+		g.GET("/me", m.RequireAuth(), m.handler.GetMe)
 	}
 }

@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -20,6 +22,8 @@ func refreshKey(tokenHash string) string { return "refresh:" + tokenHash }
 func emailOTPKey(email string) string    { return "email_otp:" + email }
 func verifiedKey(email string) string    { return "email_verified:" + email }
 func resetKey(email string) string       { return "pwd_reset:" + email }
+func secretKey(customerID int) string    { return "jwt_secret:" + strconv.Itoa(customerID) }
+func privKey(userID int) string          { return "privileges:" + strconv.Itoa(userID) }
 
 func (s *RedisStore) SaveRefresh(ctx context.Context, tokenHash, userID string, ttl time.Duration) error {
 	return s.rdb.Set(ctx, refreshKey(tokenHash), userID, ttl).Err()
@@ -95,4 +99,44 @@ func (s *RedisStore) GetResetOTP(ctx context.Context, email string) (string, err
 
 func (s *RedisStore) DeleteResetOTP(ctx context.Context, email string) error {
 	return s.rdb.Del(ctx, resetKey(email)).Err()
+}
+
+// --- Per-request auth caches (best-effort; DB is the source of truth) --------
+
+func (s *RedisStore) CacheJWTSecret(ctx context.Context, customerID int, secret string, ttl time.Duration) error {
+	return s.rdb.Set(ctx, secretKey(customerID), secret, ttl).Err()
+}
+
+func (s *RedisStore) GetJWTSecret(ctx context.Context, customerID int) (string, error) {
+	secret, err := s.rdb.Get(ctx, secretKey(customerID)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return secret, nil
+}
+
+func (s *RedisStore) CachePrivileges(ctx context.Context, userID int, privs []string, ttl time.Duration) error {
+	b, err := json.Marshal(privs)
+	if err != nil {
+		return err
+	}
+	return s.rdb.Set(ctx, privKey(userID), b, ttl).Err()
+}
+
+func (s *RedisStore) GetPrivileges(ctx context.Context, userID int) ([]string, error) {
+	raw, err := s.rdb.Get(ctx, privKey(userID)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var privs []string
+	if err := json.Unmarshal(raw, &privs); err != nil {
+		return nil, err
+	}
+	return privs, nil
 }

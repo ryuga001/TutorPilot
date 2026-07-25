@@ -1,9 +1,14 @@
 package auth
 
+// RegisterRequest onboards a new tenant: it creates the customer (organization)
+// and its first dashboard user, who is granted the admin role. The email must
+// already be verified via the OTP flow.
 type RegisterRequest struct {
-	Name     string `json:"name" binding:"required,min=2"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	OrgName   string `json:"org_name" binding:"required,min=2,max=100"`
+	FirstName string `json:"first_name" binding:"required,min=1,max=50"`
+	LastName  string `json:"last_name" binding:"required,min=1,max=50"`
+	Email     string `json:"email" binding:"required,email"`
+	Password  string `json:"password" binding:"required,min=8"`
 }
 
 type LoginRequest struct {
@@ -46,6 +51,6 @@ type TokenPair struct {
 }
 
 type AuthResponse struct {
-	User   *User      `json:"user"`
+	User   *UserView  `json:"user"`
 	Tokens *TokenPair `json:"tokens"`
 }

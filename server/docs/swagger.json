@@ -5,8 +5,8 @@
     ],
     "swagger": "2.0",
     "info": {
-        "description": "Backend for the Zenith AI coaching app — authentication \u0026 notifications.",
-        "title": "Workflow Automation",
+        "description": "Backend for TutorPilot — authentication \u0026 notifications.",
+        "title": "TutorPilot",
         "contact": {},
         "version": "1.0"
     },
@@ -133,7 +133,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/auth.User"
+                                            "$ref": "#/definitions/auth.UserView"
                                         }
                                     }
                                 }
@@ -433,7 +433,7 @@
                     "$ref": "#/definitions/auth.TokenPair"
                 },
                 "user": {
-                    "$ref": "#/definitions/auth.User"
+                    "$ref": "#/definitions/auth.UserView"
                 }
             }
         },
@@ -478,15 +478,28 @@
             "type": "object",
             "required": [
                 "email",
-                "name",
+                "first_name",
+                "last_name",
+                "org_name",
                 "password"
             ],
             "properties": {
                 "email": {
                     "type": "string"
                 },
-                "name": {
+                "first_name": {
                     "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
+                "last_name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
+                "org_name": {
+                    "type": "string",
+                    "maxLength": 100,
                     "minLength": 2
                 },
                 "password": {
@@ -543,25 +556,22 @@
                 }
             }
         },
-        "auth.User": {
+        "auth.UserView": {
             "type": "object",
             "properties": {
                 "created_at": {
                     "type": "string"
                 },
+                "customer_id": {
+                    "type": "integer"
+                },
                 "email": {
                     "type": "string"
                 },
-                "email_verified": {
-                    "type": "boolean"
-                },
                 "id": {
-                    "type": "string"
+                    "type": "integer"
                 },
-                "name": {
-                    "type": "string"
-                },
-                "updated_at": {
+                "role": {
                     "type": "string"
                 }
             }
