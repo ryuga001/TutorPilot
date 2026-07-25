@@ -1,27 +1,33 @@
 import React from 'react'
 
 interface PageThemeProps {
-    title ?: string;
-    subtitle ?: string;
-    children ?: React.ReactNode;
+  title?: string;
+  subtitle?: string;
+  children?: React.ReactNode;
 }
 
 const PageTheme = ({ title, subtitle, children }: PageThemeProps) => {
   return (
-    <div>
-        <section>
-            <div>
-                {title && <h1 className='text-2xl font-bold'>{title}</h1>}
-            </div>
-            <div>
-                {subtitle && <p className='text-sm text-muted-foreground'>{subtitle}</p>}
-            </div>
-        </section>
-        <section>
-            {children}
-        </section>
-    </div>
-  )
-}
+    <div className="space-y-8 px-6 py-6 lg:px-8">
+      <section className="space-y-2">
+        {title && (
+          <h1 className="text-3xl font-bold tracking-tight">
+            {title}
+          </h1>
+        )}
 
-export default PageTheme
+        {subtitle && (
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            {subtitle}
+          </p>
+        )}
+      </section>
+
+      <section className="space-y-6">
+        {children}
+      </section>
+    </div>
+  );
+};
+
+export default PageTheme;

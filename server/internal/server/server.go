@@ -9,6 +9,8 @@ import (
 	"tutorpilot/internal/modules/auth"
 	"tutorpilot/internal/modules/courses"
 	"tutorpilot/internal/modules/notification"
+	"tutorpilot/internal/modules/students"
+	"tutorpilot/internal/modules/tutors"
 	"tutorpilot/internal/pkg/jwtutil"
 	"tutorpilot/internal/pkg/mailer"
 	"tutorpilot/internal/pkg/storage"
@@ -28,7 +30,6 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS(cfg.CORSAllowedOrigins))
 
-	// Shared infrastructure.
 	jwtMgr := jwtutil.New(cfg.JWTAccessTTL)
 	mail := mailer.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
 	templates := notification.NewTemplateStore(db)
@@ -68,6 +69,22 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 		RequirePriv: authModule.RequirePrivilege,
 	})
 	coursesModule.RegisterRoutes(api)
+
+	tutorsModule := tutors.New(tutors.Deps{
+		DB:          db,
+		Storage:     store,
+		RequireAuth: authModule.RequireAuth,
+		RequirePriv: authModule.RequirePrivilege,
+	})
+	tutorsModule.RegisterRoutes(api)
+
+	studentsModule := students.New(students.Deps{
+		DB:          db,
+		Storage:     store,
+		RequireAuth: authModule.RequireAuth,
+		RequirePriv: authModule.RequirePrivilege,
+	})
+	studentsModule.RegisterRoutes(api)
 
 	return r
 }

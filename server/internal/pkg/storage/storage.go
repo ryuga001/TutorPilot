@@ -2,8 +2,12 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"mime/multipart"
+	"path/filepath"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -67,4 +71,33 @@ func (s *Storage) PublicURL(key string) string {
 
 func (s *Storage) Remove(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
+}
+
+func (s *Storage) UploadFile(ctx context.Context, keyPrefix string, fh *multipart.FileHeader) (string, error) {
+	f, err := fh.Open()
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	key := fmt.Sprintf("%s/%s-%s", keyPrefix, randToken(), sanitizeName(fh.Filename))
+	if err := s.Upload(ctx, key, f, fh.Size, fh.Header.Get("Content-Type")); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func sanitizeName(name string) string {
+	name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
+	name = strings.ReplaceAll(name, " ", "-")
+	if name == "" || name == "." || name == "/" {
+		name = "file"
+	}
+	return name
+}
+
+func randToken() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
