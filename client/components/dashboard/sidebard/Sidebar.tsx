@@ -3,33 +3,42 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BookOpen,
+  GraduationCap,
   LayoutDashboard,
   Loader2,
   LogOut,
-  Mail,
-  Shield,
   Users,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useDashboard } from "@/lib/dashboard-context";
+import { useCan } from "@/lib/hooks/useCan";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  privilege?: string;
+}[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/courses", label: "Courses", icon: BookOpen, privilege: "course.view" },
   { href: "/dashboard/tutors", label: "Tutors", icon: Users },
-  { href: "/dashboard/courses", label: "Courses", icon: Shield },
-  { href: "/dashboard/students", label: "Students", icon: Users },
+  { href: "/dashboard/students", label: "Students", icon: GraduationCap },
 ];
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const can = useCan();
   const { handleLogout, loggingOut } = useDashboard();
+
+  const items = NAV_ITEMS.filter((i) => !i.privilege || can(i.privilege));
 
   return (
     <div className="hidden h-full w-56 shrink-0 flex-col border-r bg-background md:flex">
       <nav className="flex flex-1 flex-col gap-1 p-3">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const active =
             href === "/dashboard"
               ? pathname === href

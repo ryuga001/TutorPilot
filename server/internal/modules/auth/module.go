@@ -61,5 +61,6 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 
 		g.POST("/logout", m.RequireAuth(), m.handler.Logout)
 		g.GET("/me", m.RequireAuth(), m.handler.GetMe)
+		g.GET("/privileges", m.RequireAuth(), m.handler.GetPrivileges)
 	}
 }

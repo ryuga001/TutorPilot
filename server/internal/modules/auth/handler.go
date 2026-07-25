@@ -232,6 +232,21 @@ func (h *Handler) SendVerification(c *gin.Context) {
 // @Success      200  {object}  httpx.Envelope{data=UserView}
 // @Failure      401  {object}  httpx.Envelope
 // @Router       /auth/me [get]
+// GetPrivileges returns the current user's privilege names (for frontend gating).
+func (h *Handler) GetPrivileges(c *gin.Context) {
+	userID, err := strconv.Atoi(c.GetString(middleware.CtxUserID))
+	if err != nil {
+		httpx.Fail(c, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	privs, err := h.svc.GetPrivileges(c.Request.Context(), userID)
+	if err != nil {
+		httpx.Fail(c, http.StatusInternalServerError, "could not load privileges")
+		return
+	}
+	httpx.OK(c, http.StatusOK, "ok", privs)
+}
+
 func (h *Handler) GetMe(c *gin.Context) {
 	userID, err := strconv.Atoi(c.GetString(middleware.CtxUserID))
 	if err != nil {

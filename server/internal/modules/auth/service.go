@@ -222,7 +222,26 @@ func (s *Service) GetMe(ctx context.Context, userID int) (*UserView, error) {
 	if err != nil {
 		return nil, err
 	}
-	return user.View(), nil
+	view := user.View()
+	if privs, err := s.GetPrivileges(ctx, userID); err == nil {
+		view.Privileges = privs
+	}
+	return view, nil
+}
+
+// GetPrivileges returns the user's privilege names, caching the set in redis.
+func (s *Service) GetPrivileges(ctx context.Context, userID int) ([]string, error) {
+	privs, err := s.store.GetPrivileges(ctx, userID)
+	if errors.Is(err, ErrNotFound) {
+		privs, err = s.repo.GetUserPrivileges(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		_ = s.store.CachePrivileges(ctx, userID, privs, privCacheTTL)
+	} else if err != nil {
+		return nil, err
+	}
+	return privs, nil
 }
 
 // --- Middleware resolvers -----------------------------------------------------
@@ -240,21 +259,13 @@ func (s *Service) ResolveSecret(ctx context.Context, customerID int) ([]byte, er
 	return []byte(secret), nil
 }
 
-// HasPrivilege reports whether the user holds the named privilege, caching the
-// user's privilege set in redis.
 func (s *Service) HasPrivilege(ctx context.Context, userIDStr, privilege string) (bool, error) {
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
 		return false, err
 	}
-	privs, err := s.store.GetPrivileges(ctx, userID)
-	if errors.Is(err, ErrNotFound) {
-		privs, err = s.repo.GetUserPrivileges(ctx, userID)
-		if err != nil {
-			return false, err
-		}
-		_ = s.store.CachePrivileges(ctx, userID, privs, privCacheTTL)
-	} else if err != nil {
+	privs, err := s.GetPrivileges(ctx, userID)
+	if err != nil {
 		return false, err
 	}
 	for _, p := range privs {

@@ -1,4 +1,4 @@
-// Mirrors the Go API's httpx.Envelope and auth DTOs.
+// Mirrors the Go API's httpx.Envelope and DTOs.
 
 export interface Envelope<T> {
   success: boolean;
@@ -7,18 +7,22 @@ export interface Envelope<T> {
   error?: string;
 }
 
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface UserView {
   id: number;
   customer_id: number;
   email: string;
   role: string;
+  privileges?: string[];
   created_at: string;
-  first_name: string;
-  last_name: string;
-}
-
-export interface Privilages {
-  
+  first_name?: string;
+  last_name?: string;
 }
 
 export interface TokenPair {
@@ -33,7 +37,7 @@ export interface AuthResponse {
   tokens: TokenPair;
 }
 
-// Request payloads
+
 export interface LoginInput {
   email: string;
   password: string;
@@ -56,4 +60,68 @@ export interface ResetPasswordInput {
   email: string;
   otp: string;
   new_password: string;
+}
+
+
+export type CourseStatus = "draft" | "published";
+
+export interface CourseResource {
+  id: number;
+  lesson_id?: number;
+  name: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface CourseLesson {
+  id: number;
+  title: string;
+  content_md: string;
+  position: number;
+}
+
+export interface CourseModule {
+  id: number;
+  title: string;
+  position: number;
+  lessons: CourseLesson[];
+}
+
+export interface Course {
+  id: number;
+  title: string;
+  slug: string;
+  summary: string;
+  description_md: string;
+  thumbnail_url?: string;
+  status: CourseStatus;
+  published_at?: string;
+  created_at: string;
+  updated_at: string;
+  modules?: CourseModule[];
+}
+
+export interface CreateCourseInput {
+  title: string;
+  summary?: string;
+  description_md?: string;
+}
+
+export interface UpdateCourseInput {
+  title: string;
+  summary: string;
+  description_md: string;
+}
+
+export interface ModuleInput {
+  title: string;
+  position?: number;
+}
+
+export interface LessonInput {
+  title: string;
+  content_md: string;
+  position?: number;
 }

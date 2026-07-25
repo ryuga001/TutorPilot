@@ -59,6 +59,12 @@ export const authApi = createApi({
       transformResponse: (r: Envelope<UserView>) => r.data as UserView,
       providesTags: ["Me"],
     }),
+
+    getPrivileges: build.query<string[], void>({
+      query: () => "/auth/privileges",
+      transformResponse: (r: Envelope<string[]>) => r.data ?? [],
+      providesTags: ["Me"],
+    }),
   }),
 });
 
@@ -71,4 +77,5 @@ export const {
   useResetPasswordMutation,
   useLogoutMutation,
   useGetMeQuery,
+  useGetPrivilegesQuery,
 } = authApi;

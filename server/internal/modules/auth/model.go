@@ -24,6 +24,7 @@ type UserView struct {
 	CustomerID int       `json:"customer_id"`
 	Email      string    `json:"email"`
 	Role       string    `json:"role"`
+	Privileges []string  `json:"privileges,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 

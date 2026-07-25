@@ -1,13 +1,17 @@
 package server
 
 import (
+	"log"
 	"net/http"
+
 	"tutorpilot/internal/config"
 	"tutorpilot/internal/middleware"
 	"tutorpilot/internal/modules/auth"
+	"tutorpilot/internal/modules/courses"
 	"tutorpilot/internal/modules/notification"
 	"tutorpilot/internal/pkg/jwtutil"
 	"tutorpilot/internal/pkg/mailer"
+	"tutorpilot/internal/pkg/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,6 +54,20 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 		OTPTTL:     cfg.OTPTTL,
 	})
 	authModule.RegisterRoutes(api)
+
+	store, err := storage.New(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey,
+		cfg.MinIOBucket, cfg.MinIOPublicURL, cfg.MinIOUseSSL)
+	if err != nil {
+		log.Printf("storage: MinIO unavailable, course uploads disabled: %v", err)
+		store = nil
+	}
+	coursesModule := courses.New(courses.Deps{
+		DB:          db,
+		Storage:     store,
+		RequireAuth: authModule.RequireAuth,
+		RequirePriv: authModule.RequirePrivilege,
+	})
+	coursesModule.RegisterRoutes(api)
 
 	return r
 }

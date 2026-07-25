@@ -29,6 +29,13 @@ type Config struct {
 
 	OTPTTL       time.Duration
 	AppVerifyURL string
+
+	MinIOEndpoint  string
+	MinIOAccessKey string
+	MinIOSecretKey string
+	MinIOBucket    string
+	MinIOPublicURL string
+	MinIOUseSSL    bool
 }
 
 func Load() (*Config, error) {
@@ -45,6 +52,13 @@ func Load() (*Config, error) {
 		SMTPFrom:           getEnv("SMTP_FROM", "TutorPilot <no-reply@tutorpilot.ai>"),
 		AppVerifyURL:       getEnv("APP_VERIFY_URL", "http://localhost:8080/verify-email"),
 		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "*")),
+
+		MinIOEndpoint:  getEnv("MINIO_ENDPOINT", "localhost:9000"),
+		MinIOAccessKey: getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+		MinIOSecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
+		MinIOBucket:    getEnv("MINIO_BUCKET", "tutorpilot"),
+		MinIOPublicURL: getEnv("MINIO_PUBLIC_URL", "http://localhost:9000"),
+		MinIOUseSSL:    getBool("MINIO_USE_SSL", false),
 	}
 
 	var err error
@@ -84,6 +98,19 @@ func splitCSV(v string) []string {
 		}
 	}
 	return out
+}
+
+func getBool(key string, fallback bool) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func getDuration(key string, fallback time.Duration) (time.Duration, error) {
