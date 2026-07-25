@@ -18,9 +18,6 @@ const Navbar = () => {
           <div className="flex h-8 w-8 items-center justify-center bg-primary text-sm font-semibold text-primary-foreground">
             {initial}
           </div>
-          <span className="hidden text-sm text-muted-foreground sm:inline">
-            {me?.email}
-          </span>
         </div>
       </div>
     </nav>

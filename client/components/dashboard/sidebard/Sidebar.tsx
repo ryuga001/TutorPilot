@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/users", label: "Users", icon: Users },
-  { href: "/dashboard/roles", label: "Roles & Privileges", icon: Shield },
-  { href: "/dashboard/templates", label: "Email Templates", icon: Mail },
+  { href: "/dashboard/tutors", label: "Tutors", icon: Users },
+  { href: "/dashboard/courses", label: "Courses", icon: Shield },
+  { href: "/dashboard/students", label: "Students", icon: Users },
 ];
 
 const Sidebar = () => {
