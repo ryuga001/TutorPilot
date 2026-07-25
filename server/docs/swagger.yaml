@@ -1,0 +1,386 @@
+basePath: /api/v1
+definitions:
+  auth.AuthResponse:
+    properties:
+      tokens:
+        $ref: '#/definitions/auth.TokenPair'
+      user:
+        $ref: '#/definitions/auth.User'
+    type: object
+  auth.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  auth.LogoutRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      name:
+        minLength: 2
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  auth.ResetPasswordRequest:
+    properties:
+      email:
+        type: string
+      new_password:
+        minLength: 8
+        type: string
+      otp:
+        type: string
+    required:
+    - email
+    - new_password
+    - otp
+    type: object
+  auth.SendVerificationRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  auth.TokenPair:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+    type: object
+  auth.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  auth.VerifyEmailRequest:
+    properties:
+      email:
+        type: string
+      otp:
+        type: string
+    required:
+    - email
+    - otp
+    type: object
+  httpx.Envelope:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: Backend for the Zenith AI coaching app — authentication & notifications.
+  title: Workflow Automation
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email and password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpx.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.AuthResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Log in
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token to revoke
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Log out (revoke a refresh token)
+      tags:
+      - auth
+  /auth/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpx.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.User'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Current user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges a valid refresh token for a new access + refresh pair.
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpx.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.TokenPair'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Rotate refresh token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates the account for an already-verified email and returns tokens.
+      parameters:
+      - description: Name, email, password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/httpx.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/auth.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "403":
+          description: email not verified
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "409":
+          description: email already registered
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Register a verified email
+      tags:
+      - auth
+  /auth/resend-verification:
+    post:
+      consumes:
+      - application/json
+      description: Emails a 6-digit OTP for an unregistered email. Also mounted at
+        /auth/resend-verification.
+      parameters:
+      - description: Email
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.SendVerificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "409":
+          description: email already registered
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Send an email verification code
+      tags:
+      - auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email, OTP, new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "400":
+          description: invalid or expired otp
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Reset password with a code
+      tags:
+      - auth
+  /auth/send-verification:
+    post:
+      consumes:
+      - application/json
+      description: Emails a 6-digit OTP for an unregistered email. Also mounted at
+        /auth/resend-verification.
+      parameters:
+      - description: Email
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.SendVerificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "409":
+          description: email already registered
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Send an email verification code
+      tags:
+      - auth
+  /auth/verify-email:
+    post:
+      consumes:
+      - application/json
+      description: Confirms the code and marks the email verified (no user created
+        yet).
+      parameters:
+      - description: Email and 6-digit OTP
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.VerifyEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+        "400":
+          description: invalid or expired otp
+          schema:
+            $ref: '#/definitions/httpx.Envelope'
+      summary: Verify an email OTP
+      tags:
+      - auth
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

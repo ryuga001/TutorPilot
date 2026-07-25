@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zenith-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zenith
+      POSTGRES_PASSWORD: zenith
+      POSTGRES_DB: workflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - zenith_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zenith -d zenith"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: zenith-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: zenith-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025" 
+
+volumes:
+  zenith_pgdata:
