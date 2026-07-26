@@ -47,9 +47,14 @@ func (n *Notifier) SendPasswordReset(ctx context.Context, name, toEmail, otp str
 	})
 }
 
-// send loads the saved template (subject + HTML body), substitutes {{var}}
-// placeholders and mails it. If the template row is missing, the error is
-// returned to the caller — there is no fallback.
+func (n *Notifier) SendBatchTutorAssignment(ctx context.Context, toEmail string, vars map[string]string) error {
+	return n.send(ctx, toEmail, tmplBatchTutorAssignment, vars)
+}
+
+func (n *Notifier) SendBatchStudentEnrollment(ctx context.Context, toEmail string, vars map[string]string) error {
+	return n.send(ctx, toEmail, tmplBatchStudentEnrollment, vars)
+}
+
 func (n *Notifier) send(ctx context.Context, toEmail, name string, vars map[string]string) error {
 	tmpl, err := n.templates.Get(ctx, n.tenantID, name)
 	if err != nil {

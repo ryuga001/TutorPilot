@@ -8,7 +8,7 @@ interface PageThemeProps {
 
 const PageTheme = ({ title, subtitle, children }: PageThemeProps) => {
   return (
-    <div className="space-y-8 px-6 py-6 lg:px-8">
+    <div className="space-y-4 p-2 lg:px-8">
       <section className="space-y-2">
         {title && (
           <h1 className="text-3xl font-bold tracking-tight">

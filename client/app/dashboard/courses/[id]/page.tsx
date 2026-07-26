@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { RequirePrivilege } from "@/components/auth/RequirePrivilege";
+import { CourseBatchesTab } from "@/components/dashboard/courses/CourseBatchesTab";
 import { CourseCurriculumTab } from "@/components/dashboard/courses/CourseCurriculumTab";
 import { CourseDetailsTab } from "@/components/dashboard/courses/CourseDetailsTab";
 import { CourseResourcesTab } from "@/components/dashboard/courses/CourseResourcesTab";
@@ -70,7 +71,7 @@ function CourseDetail({ id }: { id: number }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <Link
@@ -120,6 +121,7 @@ function CourseDetail({ id }: { id: number }) {
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="curriculum">Curriculum</TabsTrigger>
           <TabsTrigger value="resources">Resources</TabsTrigger>
+          <TabsTrigger value="batches">Batches</TabsTrigger>
         </TabsList>
         <TabsContent value="details">
           <CourseDetailsTab course={course} canEdit={canEdit} />
@@ -129,6 +131,9 @@ function CourseDetail({ id }: { id: number }) {
         </TabsContent>
         <TabsContent value="resources">
           <CourseResourcesTab courseId={course.id} canEdit={canEdit} />
+        </TabsContent>
+        <TabsContent value="batches">
+          <CourseBatchesTab courseId={course.id} />
         </TabsContent>
       </Tabs>
     </div>

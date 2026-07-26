@@ -7,6 +7,7 @@ import (
 	"tutorpilot/internal/config"
 	"tutorpilot/internal/middleware"
 	"tutorpilot/internal/modules/auth"
+	"tutorpilot/internal/modules/batches"
 	"tutorpilot/internal/modules/courses"
 	"tutorpilot/internal/modules/notification"
 	"tutorpilot/internal/modules/students"
@@ -85,6 +86,15 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 		RequirePriv: authModule.RequirePrivilege,
 	})
 	studentsModule.RegisterRoutes(api)
+
+	batchesModule := batches.New(batches.Deps{
+		DB:          db,
+		Storage:     store,
+		Notifier:    notifier,
+		RequireAuth: authModule.RequireAuth,
+		RequirePriv: authModule.RequirePrivilege,
+	})
+	batchesModule.RegisterRoutes(api)
 
 	return r
 }

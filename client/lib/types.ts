@@ -186,3 +186,75 @@ export interface CreateStudentInput {
 }
 
 export type UpdateStudentInput = CreateStudentInput;
+
+export type BatchStatus = "draft" | "published";
+
+export interface TutorSummary {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
+export interface StudentSummary {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_no: string;
+}
+
+export interface ModuleAssignment {
+  course_module_id: number;
+  module_title: string;
+  module_position: number;
+  tutor?: TutorSummary;
+  start_date?: string;
+  expected_end_date?: string;
+}
+
+export interface Batch {
+  id: number;
+  course_id: number;
+  name: string;
+  status: BatchStatus;
+  published_at?: string;
+  created_at: string;
+  updated_at: string;
+  modules?: ModuleAssignment[];
+  tutor_count: number;
+  student_count: number;
+}
+
+export interface CreateBatchInput {
+  course_id: number;
+  name: string;
+}
+
+export interface UpdateBatchInput {
+  name: string;
+}
+
+export interface AssignTutorInput {
+  tutor_id: number;
+  start_date: string;
+  expected_end_date: string;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: { row: number; reason: string }[];
+}
+
+export type DriveNodeType = "folder" | "file";
+
+export interface DriveNode {
+  id: number;
+  parent_id?: number;
+  name: string;
+  type: DriveNodeType;
+  url?: string;
+  content_type?: string;
+  size_bytes?: number;
+  created_at: string;
+}
