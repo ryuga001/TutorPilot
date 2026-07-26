@@ -64,7 +64,7 @@ func Load() (*Config, error) {
 		MinIOPublicURL: getEnv("MINIO_PUBLIC_URL", "http://localhost:9000"),
 		MinIOUseSSL:    getBool("MINIO_USE_SSL", false),
 
-		LiveKitURL:    getEnv("LIVEKIT_URL", "http://localhost:8080"),
+		LiveKitURL:    getEnv("LIVEKIT_URL", "http://localhost:7880"),
 		LiveKitKey:    getEnv("LIVEKIT_API_KEY", "tutorpilot"),
 		LiveKitSecret: getEnv("LIVEKIT_API_SECRET", "tutorpilot"),
 	}

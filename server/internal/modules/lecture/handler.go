@@ -40,7 +40,11 @@ func failErr(c *gin.Context, err error) {
 	case errors.Is(err, ErrNotFound):
 		httpx.Fail(c, http.StatusNotFound, "not found")
 	default:
-		httpx.Fail(c, http.StatusInternalServerError, err.Error())
+		if err != nil {
+			httpx.Fail(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.Fail(c, http.StatusInternalServerError, "lecture operation failed")
 	}
 }
 

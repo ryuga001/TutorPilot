@@ -3,7 +3,6 @@ package lecture
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -232,9 +231,9 @@ func (r *Repository) ListLectures(
 	SELECT COUNT(*)
 	FROM lectures
 	WHERE customer_id = $1
-	  AND ($2::int IS NULL OR batch_id = $2)
-	  AND ($3 = '' OR status = $3)
-	  AND ($4 = '' OR title ILIKE '%' || $4 || '%')
+	  AND ($2::int IS NULL OR batch_id = $2::int)
+	  AND ($3::text = '' OR status = $3::text)
+	  AND ($4::text = '' OR title ILIKE '%' || $4::text || '%')
 	`
 
 	var total int
@@ -246,6 +245,9 @@ func (r *Repository) ListLectures(
 		status,
 		search,
 	).Scan(&total); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []Lecture{}, 0, ErrNotFound
+		}
 		return nil, 0, err
 	}
 
@@ -253,9 +255,9 @@ func (r *Repository) ListLectures(
 	SELECT ` + lectureCols + `
 	FROM lectures
 	WHERE customer_id = $1
-	  AND ($2::int IS NULL OR batch_id = $2)
-	  AND ($3 = '' OR status = $3)
-	  AND ($4 = '' OR title ILIKE '%' || $4 || '%')
+	  AND ($2::int IS NULL OR batch_id = $2::int)
+	  AND ($3::text = '' OR status = $3::text)
+	  AND ($4::text = '' OR title ILIKE '%' || $4::text || '%')
 	ORDER BY start_time DESC
 	LIMIT $5 OFFSET $6
 	`
@@ -271,6 +273,9 @@ func (r *Repository) ListLectures(
 		offset,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return []Lecture{}, 0, ErrNotFound
+		}
 		return nil, 0, err
 	}
 	defer rows.Close()
@@ -289,6 +294,7 @@ func (r *Repository) ListLectures(
 			&l.Title,
 			&l.Description,
 			&l.RoomName,
+			&l.EgressID,
 			&l.Status,
 			&l.RecordingEnabled,
 			&l.RecordingURL,

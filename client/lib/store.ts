@@ -2,6 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import { authApi } from "@/lib/api/authApi";
 import { batchesApi } from "@/lib/api/batchesApi";
 import { coursesApi } from "@/lib/api/coursesApi";
+import { lecturesApi } from "@/lib/api/lecturesApi";
 import { studentsApi } from "@/lib/api/studentsApi";
 import { tutorsApi } from "@/lib/api/tutorsApi";
 import authReducer, {
@@ -28,6 +29,7 @@ export const makeStore = () => {
       auth: authReducer,
       [authApi.reducerPath]: authApi.reducer,
       [coursesApi.reducerPath]: coursesApi.reducer,
+      [lecturesApi.reducerPath]: lecturesApi.reducer,
       [tutorsApi.reducerPath]: tutorsApi.reducer,
       [studentsApi.reducerPath]: studentsApi.reducer,
       [batchesApi.reducerPath]: batchesApi.reducer,
@@ -36,6 +38,7 @@ export const makeStore = () => {
       getDefaultMiddleware().concat(
         authApi.middleware,
         coursesApi.middleware,
+        lecturesApi.middleware,
         tutorsApi.middleware,
         studentsApi.middleware,
         batchesApi.middleware,

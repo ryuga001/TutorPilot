@@ -16,12 +16,12 @@ import (
 
 type Storage struct {
 	client    *minio.Client
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	UseSSL    bool
+	bucket    string
 	publicURL string
+	endpoint  string
+	accessKey string
+	secretKey string
+	useSSL    bool
 }
 
 func New(endpoint, accessKey, secretKey, bucket, publicURL string, useSSL bool) (*Storage, error) {
@@ -57,28 +57,48 @@ func New(endpoint, accessKey, secretKey, bucket, publicURL string, useSSL bool) 
 
 	return &Storage{
 		client:    client,
-		Endpoint:  endpoint,
-		AccessKey: accessKey,
-		SecretKey: secretKey,
-		Bucket:    bucket,
-		UseSSL:    useSSL,
+		bucket:    bucket,
 		publicURL: strings.TrimRight(publicURL, "/"),
+		endpoint:  endpoint,
+		accessKey: accessKey,
+		secretKey: secretKey,
+		useSSL:    useSSL,
 	}, nil
 }
 
 func (s *Storage) Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
-	_, err := s.client.PutObject(ctx, s.Bucket, key, r, size, minio.PutObjectOptions{
+	_, err := s.client.PutObject(ctx, s.bucket, key, r, size, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	return err
 }
 
 func (s *Storage) PublicURL(key string) string {
-	return fmt.Sprintf("%s/%s/%s", s.publicURL, s.Bucket, key)
+	return fmt.Sprintf("%s/%s/%s", s.publicURL, s.bucket, key)
+}
+
+func (s *Storage) Endpoint() string {
+	return s.endpoint
+}
+
+func (s *Storage) AccessKeyValue() string {
+	return s.accessKey
+}
+
+func (s *Storage) SecretKeyValue() string {
+	return s.secretKey
+}
+
+func (s *Storage) BucketName() string {
+	return s.bucket
+}
+
+func (s *Storage) UseSSLValue() bool {
+	return s.useSSL
 }
 
 func (s *Storage) Remove(ctx context.Context, key string) error {
-	return s.client.RemoveObject(ctx, s.Bucket, key, minio.RemoveObjectOptions{})
+	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 }
 
 func (s *Storage) UploadFile(ctx context.Context, keyPrefix string, fh *multipart.FileHeader) (string, error) {

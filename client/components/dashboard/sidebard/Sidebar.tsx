@@ -10,6 +10,7 @@ import {
   Loader2,
   LogOut,
   Users,
+  Video,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const NAV_ITEMS: {
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/courses", label: "Courses", icon: BookOpen, privilege: "course.view" },
   { href: "/dashboard/batches", label: "Batches", icon: CalendarDays, privilege: "batch.view" },
+  { href: "/dashboard/lectures", label: "Lectures", icon: Video, privilege: "lecture.view" },
   { href: "/dashboard/tutors", label: "Tutors", icon: Users, privilege: "tutor.view" },
   { href: "/dashboard/students", label: "Students", icon: GraduationCap, privilege: "student.view" },
 ];

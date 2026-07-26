@@ -103,6 +103,40 @@ export interface Course {
   modules?: CourseModule[];
 }
 
+export interface Lecture {
+  id: number;
+  batchId: number;
+  moduleId?: number;
+  tutorId?: number;
+  title: string;
+  description: string;
+  status: "scheduled" | "live" | "ended";
+  roomName?: string;
+  recordingEnabled: boolean;
+  recordingUrl?: string;
+  startTime: string;
+  endTime?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLectureInput {
+  batchId: number;
+  moduleId?: number;
+  tutorId?: number;
+  title: string;
+  description?: string;
+  recordingEnabled?: boolean;
+  startTime: string;
+  endTime?: string;
+}
+
+export interface UpdateLectureInput extends Partial<CreateLectureInput> {}
+
+export interface LectureJoinResponse {
+  token: string;
+}
+
 export interface CreateCourseInput {
   title: string;
   summary?: string;

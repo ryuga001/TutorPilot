@@ -44,6 +44,8 @@ TutorPlatform/
     that batch.
   - **Publishing** a batch emails every assigned tutor and every enrolled
     student their details, via the same templated-email system used for OTPs.
+- **Lectures & live rooms.** Instructors can create lecture rooms, start/end
+  them, generate LiveKit join tokens, and review recordings from the dashboard.
 - **File storage.** Course thumbnails/resources and batch drive files are stored
   in **MinIO** (S3-compatible object storage).
 - **Frontend authorization mirrors the backend.** The dashboard fetches the
@@ -58,21 +60,22 @@ TutorPlatform/
 
 | | |
 |---|---|
-| **Backend** | Go, Gin, PostgreSQL (pgx), Redis, golang-migrate, MinIO (`minio-go`), JWT |
-| **Frontend** | Next.js 15 (App Router), React 19, TypeScript, Redux Toolkit + RTK Query, Tailwind CSS + shadcn/ui, `@uiw/react-md-editor` + `react-markdown` |
-| **Infra (dev)** | Docker Compose — Postgres, Redis, Mailpit (SMTP + web UI), MinIO |
+| **Backend** | Go, Gin, PostgreSQL (pgx), Redis, golang-migrate, MinIO (`minio-go`), LiveKit, JWT |
+| **Frontend** | Next.js 15 (App Router), React 19, TypeScript, Redux Toolkit + RTK Query, Tailwind CSS + shadcn/ui, `@uiw/react-md-editor` + `react-markdown`, LiveKit React components |
+| **Infra (dev)** | Docker Compose — Postgres, Redis, Mailpit (SMTP + web UI), MinIO, LiveKit |
 
 ## Architecture at a glance
 
 **Backend** (`server/`) is organized into small, self-contained modules under
 `internal/modules/` (`auth`, `courses`, `tutors`, `students`, `batches`,
-`notification`), each following the same shape: `handler.go` (HTTP) →
+`lecture`, `notification`), each following the same shape: `handler.go` (HTTP) →
 `service.go` (business logic) → `repository.go` (Postgres access via pgx), plus
 `model.go`/`dto.go` for data shapes. Shared infrastructure lives under
 `internal/pkg/` (JWT, password hashing, mailer, MinIO storage client, a shared
 `address` store used by both tutors and students, HTTP response envelope +
 pagination helper) and `internal/middleware/` (auth + privilege-gating for Gin
-routes).
+routes). Live lecture rooms and join-token generation are handled by
+`internal/livekit/`.
 
 Every table that holds tenant data carries a `customer_id`, and every query is
 scoped to the caller's tenant — there is no cross-tenant data access path.
@@ -81,12 +84,14 @@ request (the source of truth), and mirrored client-side purely for UX (hiding
 buttons/routes the user couldn't use anyway).
 
 **Frontend** (`client/`) is a standard Next.js App Router dashboard: RTK Query
-slices (`authApi`, `coursesApi`, `tutorsApi`, `studentsApi`, `batchesApi`) talk
-to the API with automatic access-token refresh; a `DashboardProvider` fetches
-the current user + privileges once and shares them via context; generic
-building blocks (`DataTable`, `ContentCard`, `PageTheme`, `DetailPageHeader`)
-keep pages visually consistent across entities. Multi-field forms use a Sheet
-(drawer); quick single-purpose actions use a Dialog.
+slices (`authApi`, `coursesApi`, `tutorsApi`, `studentsApi`, `batchesApi`,
+`lecturesApi`) talk to the API with automatic access-token refresh; a
+`DashboardProvider` fetches the current user + privileges once and shares them
+via context; generic building blocks (`DataTable`, `ContentCard`, `PageTheme`,
+`DetailPageHeader`) keep pages visually consistent across entities. Multi-field
+forms use a Sheet (drawer); quick single-purpose actions use a Dialog. Lecture
+pages render a LiveKit room experience for active sessions and recording players
+for completed ones.
 
 See [`client/README.md`](client/README.md) for frontend stack details.
 
@@ -100,7 +105,10 @@ docker compose up -d
 
 **2. Configure environment.** Copy `server/.env.example` to `server/.env` and
 fill in `DATABASE_URL`, `PASSWORD_PEPPER`, etc. (sane defaults are provided for
-local Postgres/Redis/MinIO/Mailpit).
+local Postgres/Redis/MinIO/Mailpit). The LiveKit values in the example are
+already wired for the local Docker stack; if you want the client to connect to a
+custom LiveKit host, set `NEXT_PUBLIC_LIVEKIT_URL` in `client/.env.local` (for
+example `ws://127.0.0.1:7880`).
 
 **3. Run database migrations:**
 ```sh
@@ -138,13 +146,14 @@ server/
       tutors/            tutor directory CRUD + profile image
       students/          student directory CRUD + profile image
       batches/           batches, module↔tutor assignment, enrollment, resource drive
+      lecture/           live lecture rooms, join tokens, recording workflow
       notification/      email templates + sending
     pkg/                 shared: jwtutil, security, mailer, storage (MinIO), address, httpx, pg
   migrations/            golang-migrate SQL migrations (schema + seed data)
   docker-compose.yml     local dev infrastructure
 
 client/
-  app/dashboard/         courses, tutors, students, batches routes + shell
+  app/dashboard/         courses, tutors, students, batches, lectures routes + shell
   components/
     ui/                  shadcn/ui primitives (dialog, sheet, select, table, ...)
     dashboard/           feature components (courses, tutors/students forms, batches)
