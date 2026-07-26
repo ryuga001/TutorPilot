@@ -1,6 +1,8 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { authApi } from "@/lib/api/authApi";
 import { coursesApi } from "@/lib/api/coursesApi";
+import { studentsApi } from "@/lib/api/studentsApi";
+import { tutorsApi } from "@/lib/api/tutorsApi";
 import authReducer, {
   initialAuthState,
   type AuthState,
@@ -25,9 +27,16 @@ export const makeStore = () => {
       auth: authReducer,
       [authApi.reducerPath]: authApi.reducer,
       [coursesApi.reducerPath]: coursesApi.reducer,
+      [tutorsApi.reducerPath]: tutorsApi.reducer,
+      [studentsApi.reducerPath]: studentsApi.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(authApi.middleware, coursesApi.middleware),
+      getDefaultMiddleware().concat(
+        authApi.middleware,
+        coursesApi.middleware,
+        tutorsApi.middleware,
+        studentsApi.middleware,
+      ),
     preloadedState: { auth: loadAuthState() },
   });
 

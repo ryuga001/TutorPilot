@@ -125,3 +125,64 @@ export interface LessonInput {
   content_md: string;
   position?: number;
 }
+
+export interface Address {
+  id: number;
+  local_address: string;
+  city: string;
+  state: string;
+  country: string;
+}
+
+export interface AddressInput {
+  local_address: string;
+  city: string;
+  state: string;
+  country: string;
+}
+
+export interface Tutor {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_no: string;
+  designation: string;
+  profile_image_url?: string;
+  address?: Address;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTutorInput {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_no: string;
+  designation: string;
+  address?: AddressInput;
+}
+
+export type UpdateTutorInput = CreateTutorInput;
+
+export interface Student {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_no: string;
+  profile_image_url?: string;
+  address?: Address;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateStudentInput {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_no: string;
+  address?: AddressInput;
+}
+
+export type UpdateStudentInput = CreateStudentInput;

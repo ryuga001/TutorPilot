@@ -124,7 +124,7 @@ function ModuleItem({
         <h3 className="font-medium">{module.title}</h3>
         {canEdit && (
           <Button
-            variant="ghost"
+            variant="destructive"
             size="icon"
             className="h-8 w-8"
             onClick={removeModule}
@@ -233,7 +233,7 @@ function LessonItem({
         {canEdit && (
           <div className="flex gap-1">
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => {
                 setOpen(true);
@@ -243,7 +243,7 @@ function LessonItem({
               Edit
             </Button>
             <Button
-              variant="ghost"
+              variant="destructive"
               size="icon"
               className="h-8 w-8"
               onClick={remove}

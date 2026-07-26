@@ -94,7 +94,7 @@ export function CourseResourcesTab({
               </a>
               <div className="flex shrink-0 items-center gap-1">
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => copy(r.url)}
@@ -104,7 +104,7 @@ export function CourseResourcesTab({
                 </Button>
                 {canEdit && (
                   <Button
-                    variant="ghost"
+                    variant="destructive"
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => del(r.id)}

@@ -1,5 +1,3 @@
--- Shared address table + tutors/students directory (tenant-scoped, no login).
-
 CREATE TABLE addresses (
     id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     customer_id   INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -10,7 +8,6 @@ CREATE TABLE addresses (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_addresses_customer ON addresses (customer_id);
 
 CREATE TABLE tutors (
     id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -27,7 +24,6 @@ CREATE TABLE tutors (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (customer_id, email)
 );
-CREATE INDEX idx_tutors_customer ON tutors (customer_id);
 
 CREATE TABLE students (
     id                INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -43,4 +39,3 @@ CREATE TABLE students (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (customer_id, email)
 );
-CREATE INDEX idx_students_customer ON students (customer_id);

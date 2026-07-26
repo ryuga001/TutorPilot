@@ -24,8 +24,8 @@ const NAV_ITEMS: {
 }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/courses", label: "Courses", icon: BookOpen, privilege: "course.view" },
-  { href: "/dashboard/tutors", label: "Tutors", icon: Users },
-  { href: "/dashboard/students", label: "Students", icon: GraduationCap },
+  { href: "/dashboard/tutors", label: "Tutors", icon: Users, privilege: "tutor.view" },
+  { href: "/dashboard/students", label: "Students", icon: GraduationCap, privilege: "student.view" },
 ];
 
 const Sidebar = () => {
@@ -63,10 +63,10 @@ const Sidebar = () => {
 
       <div className="mt-auto border-t p-3">
         <Button
-          variant="ghost"
+          variant="destructive"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
+          className="w-full justify-start gap-3"
         >
           {loggingOut ? (
             <Loader2 className="h-4 w-4 animate-spin" />

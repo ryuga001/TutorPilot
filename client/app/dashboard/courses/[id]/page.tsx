@@ -103,11 +103,10 @@ function CourseDetail({ id }: { id: number }) {
           )}
           {canDelete && (
             <Button
-              variant="outline"
+              variant="destructive"
               size="sm"
               onClick={remove}
               disabled={deleting}
-              className="text-destructive"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
