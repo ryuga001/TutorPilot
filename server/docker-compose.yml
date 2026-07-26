@@ -56,6 +56,23 @@ services:
       timeout: 5s
       retries: 5
 
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: tutorpilot-livekit
+    restart: unless-stopped
+
+    command:
+      - --config
+      - /etc/livekit/livekit.yml
+
+    volumes:
+      - ./livekit/livekit.yml:/etc/livekit/livekit.yml:ro
+
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
 volumes:
   tutorpilot_pgdata:
   tutorpilot_miniodata:

@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"tutorpilot/internal/livekit"
 
 	"tutorpilot/internal/config"
 	"tutorpilot/internal/database"
@@ -44,7 +45,9 @@ func main() {
 	}
 	defer rdb.Close()
 
-	r := server.New(cfg, db, rdb)
+	lkt := livekit.New(cfg.LiveKitURL, cfg.LiveKitKey, cfg.LiveKitSecret)
+
+	r := server.New(cfg, db, rdb, lkt)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,

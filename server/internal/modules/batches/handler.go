@@ -33,7 +33,6 @@ func paramInt(c *gin.Context, key string) (int, bool) {
 	return n, true
 }
 
-// optQueryInt parses an optional positive-int query param, returning nil if absent/invalid.
 func optQueryInt(c *gin.Context, key string) *int {
 	v := c.Query(key)
 	if v == "" {
@@ -72,8 +71,6 @@ func failErr(c *gin.Context, err error) {
 		httpx.Fail(c, http.StatusInternalServerError, "something went wrong")
 	}
 }
-
-// --- Batches -----------------------------------------------------------------
 
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateBatchRequest
@@ -168,8 +165,6 @@ func (h *Handler) setPublished(c *gin.Context, published bool) {
 	httpx.OK(c, http.StatusOK, "status updated", b)
 }
 
-// --- Module <-> tutor assignment ----------------------------------------------
-
 func (h *Handler) AssignTutor(c *gin.Context) {
 	batchID, ok := paramInt(c, "id")
 	if !ok {
@@ -227,8 +222,6 @@ func (h *Handler) ListTutors(c *gin.Context) {
 	}
 	httpx.OK(c, http.StatusOK, "ok", tutors)
 }
-
-// --- Students ------------------------------------------------------------------
 
 func (h *Handler) ListStudents(c *gin.Context) {
 	batchID, ok := paramInt(c, "id")

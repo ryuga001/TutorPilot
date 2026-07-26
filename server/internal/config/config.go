@@ -36,6 +36,10 @@ type Config struct {
 	MinIOBucket    string
 	MinIOPublicURL string
 	MinIOUseSSL    bool
+
+	LiveKitURL    string
+	LiveKitKey    string
+	LiveKitSecret string
 }
 
 func Load() (*Config, error) {
@@ -59,6 +63,10 @@ func Load() (*Config, error) {
 		MinIOBucket:    getEnv("MINIO_BUCKET", "tutorpilot"),
 		MinIOPublicURL: getEnv("MINIO_PUBLIC_URL", "http://localhost:9000"),
 		MinIOUseSSL:    getBool("MINIO_USE_SSL", false),
+
+		LiveKitURL:    getEnv("LIVEKIT_URL", "http://localhost:8080"),
+		LiveKitKey:    getEnv("LIVEKIT_API_KEY", "tutorpilot"),
+		LiveKitSecret: getEnv("LIVEKIT_API_SECRET", "tutorpilot"),
 	}
 
 	var err error

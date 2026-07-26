@@ -1,0 +1,11 @@
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+
+keys:
+  tutorpilot: sdfsfd4f7c2d9a1b8e5f6a3c7d9e2f4b6a8c1ddfsafdsadf
+
+logging:
+  level: info

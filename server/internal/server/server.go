@@ -3,12 +3,14 @@ package server
 import (
 	"log"
 	"net/http"
+	"tutorpilot/internal/livekit"
 
 	"tutorpilot/internal/config"
 	"tutorpilot/internal/middleware"
 	"tutorpilot/internal/modules/auth"
 	"tutorpilot/internal/modules/batches"
 	"tutorpilot/internal/modules/courses"
+	"tutorpilot/internal/modules/lecture"
 	"tutorpilot/internal/modules/notification"
 	"tutorpilot/internal/modules/students"
 	"tutorpilot/internal/modules/tutors"
@@ -23,7 +25,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
+func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, lkt *livekit.LiveKitClient) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -95,6 +97,15 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client) *gin.Engine {
 		RequirePriv: authModule.RequirePrivilege,
 	})
 	batchesModule.RegisterRoutes(api)
+
+	lecturesModule := lecture.New(lecture.Deps{
+		DB:          db,
+		LiveKit:     lkt,
+		Storage:     store,
+		RequireAuth: authModule.RequireAuth,
+		RequirePriv: authModule.RequirePrivilege,
+	})
+	lecturesModule.RegisterRoutes(api)
 
 	return r
 }
