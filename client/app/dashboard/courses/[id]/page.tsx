@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
@@ -11,7 +10,7 @@ import { CourseBatchesTab } from "@/components/dashboard/courses/CourseBatchesTa
 import { CourseCurriculumTab } from "@/components/dashboard/courses/CourseCurriculumTab";
 import { CourseDetailsTab } from "@/components/dashboard/courses/CourseDetailsTab";
 import { CourseResourcesTab } from "@/components/dashboard/courses/CourseResourcesTab";
-import { Badge } from "@/components/ui/badge";
+import { DetailPageHeader } from "@/components/dashboard/DetailPageHeader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -72,49 +71,38 @@ function CourseDetail({ id }: { id: number }) {
 
   return (
     <div className="mx-auto w-full">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/dashboard/courses"
-            className="mb-2 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            Courses
-          </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {course.title}
-            </h1>
-            <Badge variant={published ? "default" : "secondary"}>
-              {course.status}
-            </Badge>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {canEdit && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={togglePublish}
-              disabled={publishing}
-            >
-              {publishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {published ? "Unpublish" : "Publish"}
-            </Button>
-          )}
-          {canDelete && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={remove}
-              disabled={deleting}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
-          )}
-        </div>
-      </div>
+      <DetailPageHeader
+        backHref="/dashboard/courses"
+        backLabel="Courses"
+        title={course.title}
+        badge={{ label: course.status, variant: published ? "default" : "secondary" }}
+        actions={
+          <>
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={togglePublish}
+                disabled={publishing}
+              >
+                {publishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {published ? "Unpublish" : "Publish"}
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={remove}
+                disabled={deleting}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Tabs defaultValue="details">
         <TabsList>

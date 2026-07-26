@@ -246,6 +246,11 @@ export interface ImportResult {
   skipped: { row: number; reason: string }[];
 }
 
+export interface EnrollResult {
+  enrolled: number;
+  not_found?: number[];
+}
+
 export type DriveNodeType = "folder" | "file";
 
 export interface DriveNode {

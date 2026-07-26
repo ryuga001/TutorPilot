@@ -6,6 +6,7 @@ import type {
   Batch,
   CreateBatchInput,
   DriveNode,
+  EnrollResult,
   Envelope,
   ImportResult,
   Paginated,
@@ -111,6 +112,18 @@ export const batchesApi = createApi({
         r.data as Paginated<StudentSummary>,
       providesTags: ["BatchStudents"],
     }),
+    enrollStudents: build.mutation<EnrollResult, { batchId: number; studentIds: number[] }>({
+      query: ({ batchId, studentIds }) => ({
+        url: `/batches/${batchId}/students/enroll`,
+        method: "POST",
+        body: { student_ids: studentIds },
+      }),
+      transformResponse: (r: Envelope<EnrollResult>) => r.data as EnrollResult,
+      invalidatesTags: (_r, _e, { batchId }) => [
+        { type: "Batch", id: batchId },
+        "BatchStudents",
+      ],
+    }),
     removeBatchStudent: build.mutation<void, { batchId: number; studentId: number }>({
       query: ({ batchId, studentId }) => ({
         url: `/batches/${batchId}/students/${studentId}`,
@@ -197,6 +210,7 @@ export const {
   useUnassignTutorMutation,
   useListBatchTutorsQuery,
   useListBatchStudentsQuery,
+  useEnrollStudentsMutation,
   useRemoveBatchStudentMutation,
   useImportBatchStudentsMutation,
   useListDriveQuery,

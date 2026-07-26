@@ -3,13 +3,6 @@
 import { useState, type ChangeEvent } from "react";
 import {
   ChevronRight,
-  File,
-  FileArchive,
-  FileAudio,
-  FileImage,
-  FileSpreadsheet,
-  FileText,
-  FileVideo,
   Folder,
   FolderPlus,
   Home,
@@ -45,31 +38,12 @@ import {
   useUploadDriveFileMutation,
 } from "@/lib/api/batchesApi";
 import { apiErrorMessage } from "@/lib/api-error";
+import { formatBytes, getFileIcon } from "@/lib/file-icons";
 import type { DriveNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function formatBytes(bytes?: number) {
-  if (!bytes) return "";
-  const units = ["B", "KB", "MB", "GB"];
-  let n = bytes;
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
 function nodeIcon(node: DriveNode) {
-  if (node.type === "folder") return Folder;
-  const ct = node.content_type ?? "";
-  if (ct.startsWith("image/")) return FileImage;
-  if (ct === "application/pdf") return FileText;
-  if (ct.includes("sheet") || ct.includes("excel") || ct.includes("csv")) return FileSpreadsheet;
-  if (ct.includes("zip") || ct.includes("compressed") || ct.includes("archive")) return FileArchive;
-  if (ct.startsWith("video/")) return FileVideo;
-  if (ct.startsWith("audio/")) return FileAudio;
-  return File;
+  return node.type === "folder" ? Folder : getFileIcon(node.content_type);
 }
 
 interface Crumb {

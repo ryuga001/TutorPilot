@@ -23,3 +23,7 @@ type CreateFolderRequest struct {
 type RenameNodeRequest struct {
 	Name string `json:"name" binding:"required,min=1,max=255"`
 }
+
+type EnrollStudentsRequest struct {
+	StudentIDs []int `json:"student_ids" binding:"required,min=1"`
+}

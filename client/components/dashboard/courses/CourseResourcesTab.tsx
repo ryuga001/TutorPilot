@@ -1,17 +1,24 @@
 "use client";
 
 import { type ChangeEvent } from "react";
-import { Copy, Loader2, Trash2, Upload } from "lucide-react";
+import { Copy, Loader2, MoreVertical, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   useDeleteResourceMutation,
   useListResourcesQuery,
   useUploadResourceMutation,
 } from "@/lib/api/coursesApi";
 import { apiErrorMessage } from "@/lib/api-error";
+import { formatBytes, getFileIcon } from "@/lib/file-icons";
 
 function toastErr(err: unknown) {
   toast.error(apiErrorMessage(err as FetchBaseQueryError));
@@ -57,67 +64,95 @@ export function CourseResourcesTab({
 
   return (
     <div className="space-y-4">
-      {canEdit && (
-        <div>
-          <input id="res" type="file" className="hidden" onChange={onFile} />
-          <Button asChild>
-            <label htmlFor="res" className="cursor-pointer">
-              {uploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              Upload file
-            </label>
-          </Button>
-        </div>
-      )}
-
-      {isLoading ? (
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      ) : items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No resources yet.</p>
-      ) : (
-        <ul className="divide-y border">
-          {items.map((r) => (
-            <li
-              key={r.id}
-              className="flex items-center justify-between gap-3 px-4 py-2"
-            >
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate text-sm text-primary hover:underline"
-              >
-                {r.name}
-              </a>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => copy(r.url)}
-                  aria-label="Copy link"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-                {canEdit && (
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => del(r.id)}
-                    aria-label="Delete resource"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+      <div className="flex justify-end">
+        {canEdit && (
+          <>
+            <input id="res" type="file" className="hidden" onChange={onFile} />
+            <Button asChild size="sm">
+              <label htmlFor="res" className="cursor-pointer">
+                {uploading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
                 )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                Upload file
+              </label>
+            </Button>
+          </>
+        )}
+      </div>
+
+      <div className="min-h-[12rem] border">
+        {isLoading ? (
+          <div className="flex h-48 items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Upload className="h-8 w-8" />
+            No resources yet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1 p-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {items.map((r) => {
+              const Icon = getFileIcon(r.content_type);
+              return (
+                <div
+                  key={r.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => window.open(r.url, "_blank", "noopener,noreferrer")}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    window.open(r.url, "_blank", "noopener,noreferrer")
+                  }
+                  className="group relative flex cursor-pointer flex-col items-center gap-1.5 p-3 text-center hover:bg-accent"
+                >
+                  <div
+                    className="absolute right-1 top-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label="Resource actions"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => copy(r.url)}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Copy link
+                        </DropdownMenuItem>
+                        {canEdit && (
+                          <DropdownMenuItem
+                            onClick={() => del(r.id)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <Icon className="h-10 w-10 text-muted-foreground" />
+                  <span className="w-full truncate text-xs font-medium" title={r.name}>
+                    {r.name}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatBytes(r.size_bytes)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -48,6 +48,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		g.GET("/:id/tutors", priv("batch.view"), m.handler.ListTutors)
 
 		g.GET("/:id/students", priv("batch.view"), m.handler.ListStudents)
+		g.POST("/:id/students/enroll", priv("batch.edit"), m.handler.EnrollStudents)
 		g.POST("/:id/students/import", priv("batch.edit"), m.handler.ImportStudents)
 		g.DELETE("/:id/students/:sid", priv("batch.edit"), m.handler.RemoveStudent)
 

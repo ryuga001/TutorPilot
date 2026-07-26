@@ -334,6 +334,40 @@ func (r *Repository) LoadAllStudents(ctx context.Context, batchID int) ([]Studen
 	return out, rows.Err()
 }
 
+func (r *Repository) EnrollStudentIDs(ctx context.Context, customerID, batchID int, studentIDs []int) (int, []int, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	enrolled := 0
+	notFound := make([]int, 0)
+	for _, sid := range studentIDs {
+		var exists bool
+		if err := tx.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND customer_id = $2)`,
+			sid, customerID).Scan(&exists); err != nil {
+			return 0, nil, err
+		}
+		if !exists {
+			notFound = append(notFound, sid)
+			continue
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO batch_students (batch_id, student_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			batchID, sid); err != nil {
+			return 0, nil, err
+		}
+		enrolled++
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, nil, err
+	}
+	return enrolled, notFound, nil
+}
+
 func (r *Repository) RemoveStudent(ctx context.Context, batchID, studentID int) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM batch_students WHERE batch_id = $1 AND student_id = $2`, batchID, studentID)
 	if err != nil {

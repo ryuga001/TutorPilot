@@ -211,6 +211,17 @@ func (s *Service) ListStudents(ctx context.Context, customerID, batchID int, p h
 	return httpx.NewPaginated(items, total, p), nil
 }
 
+func (s *Service) EnrollStudents(ctx context.Context, customerID, batchID int, studentIDs []int) (*EnrollResult, error) {
+	if _, err := s.repo.GetBatch(ctx, customerID, batchID); err != nil {
+		return nil, err
+	}
+	enrolled, notFound, err := s.repo.EnrollStudentIDs(ctx, customerID, batchID, studentIDs)
+	if err != nil {
+		return nil, err
+	}
+	return &EnrollResult{Enrolled: enrolled, NotFound: notFound}, nil
+}
+
 func (s *Service) RemoveStudent(ctx context.Context, customerID, batchID, studentID int) error {
 	if _, err := s.repo.GetBatch(ctx, customerID, batchID); err != nil {
 		return err

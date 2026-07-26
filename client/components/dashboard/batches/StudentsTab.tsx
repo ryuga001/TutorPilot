@@ -5,6 +5,7 @@ import { UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
+import { EnrollStudentsDrawer } from "@/components/dashboard/batches/EnrollStudentsDrawer";
 import { ImportStudentsDialog } from "@/components/dashboard/batches/ImportStudentsDialog";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/table/DataTable";
@@ -86,7 +87,14 @@ export function StudentsTab({ batchId, canEdit }: { batchId: number; canEdit: bo
       onPageChange={setPage}
       pageCount={pageCount}
       totalItems={total}
-      toolbar={canEdit ? <ImportStudentsDialog batchId={batchId} /> : undefined}
+      toolbar={
+        canEdit ? (
+          <>
+            <EnrollStudentsDrawer batchId={batchId} />
+            <ImportStudentsDialog batchId={batchId} />
+          </>
+        ) : undefined
+      }
     />
   );
 }

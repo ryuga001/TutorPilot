@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
@@ -11,7 +10,7 @@ import { DriveTab } from "@/components/dashboard/batches/DriveTab";
 import { ModulesTutorsTab } from "@/components/dashboard/batches/ModulesTutorsTab";
 import { RenameBatchDialog } from "@/components/dashboard/batches/RenameBatchDialog";
 import { StudentsTab } from "@/components/dashboard/batches/StudentsTab";
-import { Badge } from "@/components/ui/badge";
+import { DetailPageHeader } from "@/components/dashboard/DetailPageHeader";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -77,36 +76,31 @@ function BatchDetail({ id }: { id: number }) {
 
   return (
     <div className="mx-auto w-full">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href={course ? `/dashboard/courses/${course.id}` : "/dashboard/batches"}
-            className="mb-2 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            {course ? course.title : "Batches"}
-          </Link>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{batch.name}</h1>
-            {canEdit && <RenameBatchDialog id={batch.id} currentName={batch.name} />}
-            <Badge variant={published ? "default" : "secondary"}>{batch.status}</Badge>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {canEdit && (
-            <Button variant="outline" size="sm" onClick={togglePublish} disabled={publishing}>
-              {publishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {published ? "Unpublish" : "Publish"}
-            </Button>
-          )}
-          {canDelete && (
-            <Button variant="destructive" size="sm" onClick={remove} disabled={deleting}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
-          )}
-        </div>
-      </div>
+      <DetailPageHeader
+        backHref={course ? `/dashboard/courses/${course.id}` : "/dashboard/batches"}
+        backLabel={course ? course.title : "Batches"}
+        title={batch.name}
+        titleAdornment={
+          canEdit && <RenameBatchDialog id={batch.id} currentName={batch.name} />
+        }
+        badge={{ label: batch.status, variant: published ? "default" : "secondary" }}
+        actions={
+          <>
+            {canEdit && (
+              <Button variant="outline" size="sm" onClick={togglePublish} disabled={publishing}>
+                {publishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {published ? "Unpublish" : "Publish"}
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="destructive" size="sm" onClick={remove} disabled={deleting}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Tabs defaultValue="modules">
         <TabsList>

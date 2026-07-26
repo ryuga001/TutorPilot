@@ -264,6 +264,26 @@ func (h *Handler) RemoveStudent(c *gin.Context) {
 	httpx.OK(c, http.StatusOK, "student removed", nil)
 }
 
+func (h *Handler) EnrollStudents(c *gin.Context) {
+	batchID, ok := paramInt(c, "id")
+	if !ok {
+		httpx.Fail(c, http.StatusBadRequest, "invalid batch id")
+		return
+	}
+	var req EnrollStudentsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	customerID, _ := h.ids(c)
+	result, err := h.svc.EnrollStudents(c.Request.Context(), customerID, batchID, req.StudentIDs)
+	if err != nil {
+		failErr(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, "students enrolled", result)
+}
+
 func (h *Handler) ImportStudents(c *gin.Context) {
 	batchID, ok := paramInt(c, "id")
 	if !ok {

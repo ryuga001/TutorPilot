@@ -125,3 +125,8 @@ type SkippedRow struct {
 	Row    int    `json:"row"`
 	Reason string `json:"reason"`
 }
+
+type EnrollResult struct {
+	Enrolled int   `json:"enrolled"`
+	NotFound []int `json:"not_found,omitempty"`
+}
