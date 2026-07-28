@@ -1,164 +1,242 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ExternalLink, Loader2, Video } from "lucide-react";
-import { LiveKitRoom, VideoConference } from "@livekit/components-react";
-import "@livekit/components-styles";
-
-function RecordingPlayer({ src }: { src: string }) {
-  return (
-    <div className="overflow-hidden rounded-lg border bg-black">
-      <video controls className="aspect-video w-full" src={src}>
-        <track kind="captions" />
-      </video>
-    </div>
-  );
-}
-
-function resolveLiveKitServerUrl() {
-  const raw = process.env.NEXT_PUBLIC_LIVEKIT_URL;
-  if (raw) {
-    if (raw.startsWith("https://")) return raw.replace("https://", "wss://");
-    if (raw.startsWith("http://")) return raw.replace("http://", "ws://");
-    return raw;
-  }
-
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname === "::1"
-      ? "127.0.0.1"
-      : window.location.hostname;
-    return `${window.location.protocol === "https:" ? "wss" : "ws"}://${host}:7880`;
-  }
-
-  return "ws://127.0.0.1:7880";
-}
-
-function LiveRoomPreview({ roomName, token }: { roomName?: string; token?: string }) {
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-
-  if (!roomName && !token) {
-    return (
-      <div className="rounded-lg border border-primary/20 bg-background/80 p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="font-medium">Live room preview</div>
-          <div className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">{roomName || "room unavailable"}</div>
-        </div>
-        <div className="rounded-md border border-dashed bg-muted/40 p-3 text-sm text-muted-foreground">
-          Join the room to generate a session token and open the live room experience.
-        </div>
-      </div>
-    );
-  }
-
-  const serverUrl = resolveLiveKitServerUrl();
-
-  return (
-    <div className="space-y-3 rounded-lg border border-primary/20 bg-background/80 p-4">
-      <div className="flex items-center justify-between">
-        <div className="font-medium">Live room</div>
-        <div className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">{roomName}</div>
-      </div>
-      {connectionError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {connectionError}
-        </div>
-      ) : null}
-      <LiveKitRoom
-        token={token}
-        serverUrl={serverUrl}
-        connect={Boolean(token)}
-        audio={true}
-        video={true}
-        onError={(error) => setConnectionError(error.message || "Unable to connect to the live room")}
-        options={{ adaptiveStream: true, dynacast: true }}
-      >
-        <VideoConference />
-      </LiveKitRoom>
-    </div>
-  );
-}
+import {
+  ArrowLeft,
+  CalendarDays,
+  Layers,
+  Loader2,
+  LogIn,
+  PlayCircle,
+  Square,
+  UserRound,
+} from "lucide-react";
+import { toast } from "sonner";
 
 import { RequirePrivilege } from "@/components/auth/RequirePrivilege";
 import PageTheme from "@/components/pagetheme/PageTheme";
+import { AttendanceTable } from "@/components/dashboard/lectures/AttendanceTable";
+import { LiveRoom } from "@/components/dashboard/lectures/LiveRoom";
+import { RecordingPanel } from "@/components/dashboard/lectures/RecordingPanel";
+import {
+  LectureStatusBadge,
+  RecordingStatusBadge,
+  isRecordingPending,
+} from "@/components/dashboard/lectures/LectureStatus";
 import { Button } from "@/components/ui/button";
-import { useGetLectureQuery, useJoinLectureMutation } from "@/lib/api/lecturesApi";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiErrorMessage } from "@/lib/api-error";
+import {
+  useEndLectureMutation,
+  useGetLectureQuery,
+  useJoinLectureMutation,
+  useStartLectureMutation,
+} from "@/lib/api/lecturesApi";
+import { useCan } from "@/lib/hooks/useCan";
 
-function LectureDetailPageContent() {
+function LectureDetailContent() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const { data, isLoading } = useGetLectureQuery(id);
+  const can = useCan();
+
+  const [session, setSession] = useState<{ token: string; canPublish: boolean } | null>(null);
+
+  const { data: lecture, isLoading } = useGetLectureQuery(id, {
+    // A live lecture and a recording being processed both change on their own, so
+    // this refreshes while either is true and settles once the lecture is done.
+    pollingInterval: 15_000,
+    skipPollingIfUnfocused: true,
+  });
+
+  const [startLecture, { isLoading: isStarting }] = useStartLectureMutation();
+  const [endLecture, { isLoading: isEnding }] = useEndLectureMutation();
   const [joinLecture, { isLoading: isJoining }] = useJoinLectureMutation();
-  const [token, setToken] = useState<string | null>(null);
 
-  const canJoin = useMemo(() => Boolean(data?.roomName), [data?.roomName]);
-
-  const handleJoin = async () => {
-    if (!id) return;
-    const res = await joinLecture(id);
-    const payload = res.data as { token?: string } | undefined;
-    if (payload?.token) {
-      setToken(payload.token);
-    }
-  };
-
-  if (isLoading || !data) {
+  if (isLoading || !lecture) {
     return (
       <PageTheme title="Lecture" subtitle="Loading lecture details.">
-        <div className="flex h-40 items-center justify-center">
+        <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       </PageTheme>
     );
   }
 
-  return (
-    <PageTheme title={data.title} subtitle="Join the lecture room, view recordings, and stream the session.">
-      <div className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Video className="h-5 w-5 text-primary" />
-          <div>
-            <div className="font-semibold">{data.title}</div>
-            <div className="text-sm text-muted-foreground">{data.description || "No description provided."}</div>
-          </div>
-        </div>
+  const isLive = lecture.status === "live";
+  const control = can("lecture.control");
 
-        <div className="grid gap-3 rounded-md border bg-muted/30 p-4 md:grid-cols-2">
-          <div><strong>Status:</strong> {data.status}</div>
-          <div><strong>Room:</strong> {data.roomName || "Not available"}</div>
-          <div><strong>Recording enabled:</strong> {data.recordingEnabled ? "Yes" : "No"}</div>
-          <div><strong>Started:</strong> {new Date(data.startTime).toLocaleString()}</div>
+  async function handleStart() {
+    try {
+      await startLecture(id).unwrap();
+      toast.success("Lecture started — the room is open");
+    } catch (err) {
+      toast.error(apiErrorMessage(err as never));
+    }
+  }
+
+  async function handleEnd() {
+    try {
+      await endLecture(id).unwrap();
+      setSession(null);
+      toast.success("Lecture ended. The recording will appear once it is processed.");
+    } catch (err) {
+      toast.error(apiErrorMessage(err as never));
+    }
+  }
+
+  async function handleJoin() {
+    try {
+      const res = await joinLecture(id).unwrap();
+      setSession({ token: res.token, canPublish: res.can_publish });
+    } catch (err) {
+      toast.error(apiErrorMessage(err as never));
+    }
+  }
+
+  return (
+    <PageTheme title={lecture.title} subtitle={lecture.description || "No description provided."}>
+      <div className="mb-5">
+        <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Link href="/dashboard/lectures">
+            <ArrowLeft className="mr-2 h-4 w-4" /> All lectures
+          </Link>
+        </Button>
+      </div>
+
+      <div className="mb-5 flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <LectureStatusBadge status={lecture.status} />
+            <RecordingStatusBadge status={lecture.recording_status} />
+          </div>
+          <dl className="grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2 sm:gap-x-8">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+              <span>{new Date(lecture.start_time).toLocaleString()}</span>
+            </div>
+            {lecture.batch_name ? (
+              <div className="flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 shrink-0" />
+                <Link
+                  href={`/dashboard/batches/${lecture.batch_id}`}
+                  className="truncate hover:text-primary hover:underline"
+                >
+                  {lecture.batch_name}
+                </Link>
+              </div>
+            ) : null}
+            {lecture.tutor_name ? (
+              <div className="flex items-center gap-2">
+                <UserRound className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{lecture.tutor_name}</span>
+              </div>
+            ) : null}
+            {lecture.module_title ? (
+              <div className="flex items-center gap-2">
+                <span className="truncate">{lecture.module_title}</span>
+              </div>
+            ) : null}
+          </dl>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={handleJoin} disabled={!canJoin || isJoining}>
-            {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Join room
-          </Button>
-          {data.recordingUrl && (
-            <Button variant="outline" asChild>
-              <a href={data.recordingUrl} target="_blank" rel="noreferrer">
-                <ExternalLink className="mr-2 h-4 w-4" /> Open recording
-              </a>
+          {control && lecture.status === "scheduled" && (
+            <Button onClick={handleStart} disabled={isStarting}>
+              {isStarting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <PlayCircle className="mr-2 h-4 w-4" />
+              )}
+              Start lecture
+            </Button>
+          )}
+          {isLive && !session && can("lecture.join") && (
+            <Button onClick={handleJoin} disabled={isJoining}>
+              {isJoining ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogIn className="mr-2 h-4 w-4" />
+              )}
+              Join room
+            </Button>
+          )}
+          {control && isLive && (
+            <Button variant="destructive" onClick={handleEnd} disabled={isEnding}>
+              {isEnding ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Square className="mr-2 h-4 w-4" />
+              )}
+              End lecture
             </Button>
           )}
         </div>
-
-        {token || data.roomName ? (
-          <LiveRoomPreview roomName={data.roomName} token={token} />
-        ) : data.recordingUrl ? (
-          <RecordingPlayer src={data.recordingUrl} />
-        ) : (
-          <div className="rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">No recording is available yet.</div>
-        )}
-
-        {token && (
-          <div className="rounded-md border border-dashed bg-muted/30 p-3 text-sm">
-            <div className="font-medium">Session token ready</div>
-            <div className="mt-1 break-all font-mono text-xs">{token}</div>
-          </div>
-        )}
       </div>
+
+      {/* The live room takes over the page while connected: it is the whole task. */}
+      {session ? (
+        <LiveRoom
+          token={session.token}
+          canPublish={session.canPublish}
+          onLeave={() => setSession(null)}
+        />
+      ) : (
+        <Tabs defaultValue={isLive ? "room" : "recording"}>
+          <TabsList>
+            <TabsTrigger value="room">Room</TabsTrigger>
+            <TabsTrigger value="recording">
+              Recording
+              {isRecordingPending(lecture.recording_status) ? " ·" : ""}
+            </TabsTrigger>
+            <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="room" className="mt-4">
+            {isLive ? (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-12 text-center">
+                <p className="font-medium">This lecture is live</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Join to see and hear the session.
+                </p>
+                {can("lecture.join") && (
+                  <Button onClick={handleJoin} disabled={isJoining}>
+                    <LogIn className="mr-2 h-4 w-4" /> Join room
+                  </Button>
+                )}
+              </div>
+            ) : lecture.status === "scheduled" ? (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-12 text-center">
+                <p className="font-medium">The room is not open yet</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  It opens when the lecture is started
+                  {control ? "" : " by the tutor"}.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-12 text-center">
+                <p className="font-medium">
+                  This lecture has {lecture.status === "cancelled" ? "been cancelled" : "ended"}
+                </p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  {lecture.status === "ended"
+                    ? "The room is closed. Check the recording tab."
+                    : "It was called off before it ran."}
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="recording" className="mt-4">
+            <RecordingPanel lecture={lecture} />
+          </TabsContent>
+
+          <TabsContent value="attendance" className="mt-4">
+            <AttendanceTable lectureID={id} live={isLive} />
+          </TabsContent>
+        </Tabs>
+      )}
     </PageTheme>
   );
 }
@@ -166,7 +244,7 @@ function LectureDetailPageContent() {
 export default function LectureDetailPage() {
   return (
     <RequirePrivilege need="lecture.view">
-      <LectureDetailPageContent />
+      <LectureDetailContent />
     </RequirePrivilege>
   );
 }

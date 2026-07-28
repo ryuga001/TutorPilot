@@ -30,6 +30,8 @@ export const studentsApi = createApi({
       providesTags: ["Student"],
     }),
 
+    // The response carries a one-time temp_password: creating a student also
+    // creates the login they sign in with, atomically.
     createStudent: build.mutation<Student, CreateStudentInput>({
       query: (body) => ({ url: "/students", method: "POST", body }),
       transformResponse: (r: Envelope<Student>) => r.data as Student,

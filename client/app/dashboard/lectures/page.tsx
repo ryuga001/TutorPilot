@@ -1,205 +1,241 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
-import { CalendarDays, Loader2, PlayCircle, Square, Trash2, Video, Pencil } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarPlus, Loader2, Search, Video } from "lucide-react";
 import { toast } from "sonner";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { RequirePrivilege } from "@/components/auth/RequirePrivilege";
 import PageTheme from "@/components/pagetheme/PageTheme";
+import { LectureCard } from "@/components/dashboard/lectures/LectureCard";
+import { LectureFormDialog } from "@/components/dashboard/lectures/LectureFormDialog";
+import { isRecordingPending } from "@/components/dashboard/lectures/LectureStatus";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiErrorMessage } from "@/lib/api-error";
-import { useDeleteLectureMutation, useEndLectureMutation, useListLecturesQuery, useStartLectureMutation, useUpdateLectureMutation } from "@/lib/api/lecturesApi";
+import {
+  useCancelLectureMutation,
+  useDeleteLectureMutation,
+  useEndLectureMutation,
+  useListLecturesQuery,
+  useStartLectureMutation,
+} from "@/lib/api/lecturesApi";
 import { useCan } from "@/lib/hooks/useCan";
+import type { Lecture } from "@/lib/types";
+
+const PAGE_SIZE = 12;
+
+const FILTERS: { value: string; label: string }[] = [
+  { value: "", label: "All" },
+  { value: "live", label: "Live" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "ended", label: "Ended" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 function LecturesPageContent() {
   const can = useCan();
+
+  const [status, setStatus] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const { data, isLoading, isFetching } = useListLecturesQuery({ page, page_size: 10 });
+
+  const [editing, setEditing] = useState<Lecture | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  // Debounced, so typing does not fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const { data, isLoading, isFetching } = useListLecturesQuery(
+    { page, page_size: PAGE_SIZE, status, search },
+    {
+      // A live lecture's state and a recording being processed both change without
+      // the user doing anything, so the list refreshes itself while either is true.
+      pollingInterval: 15_000,
+      skipPollingIfUnfocused: true,
+    },
+  );
+
   const [startLecture] = useStartLectureMutation();
   const [endLecture] = useEndLectureMutation();
+  const [cancelLecture] = useCancelLectureMutation();
   const [deleteLecture] = useDeleteLectureMutation();
-  const [updateLecture] = useUpdateLectureMutation();
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editRecordingEnabled, setEditRecordingEnabled] = useState(true);
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const handleStart = async (id: number) => {
+  const liveCount = items.filter((l) => l.status === "live").length;
+  const pendingRecordings = items.filter((l) => isRecordingPending(l.recording_status)).length;
+
+  async function run(lecture: Lecture, action: () => Promise<unknown>, success: string) {
+    setBusyId(lecture.id);
     try {
-      await startLecture(id).unwrap();
-      toast.success("Lecture started");
+      await action();
+      toast.success(success);
     } catch (err) {
-      toast.error(apiErrorMessage(err as FetchBaseQueryError));
+      toast.error(apiErrorMessage(err as never));
+    } finally {
+      setBusyId(null);
     }
-  };
+  }
 
-  const handleEnd = async (id: number) => {
-    try {
-      await endLecture(id).unwrap();
-      toast.success("Lecture ended");
-    } catch (err) {
-      toast.error(apiErrorMessage(err as FetchBaseQueryError));
-    }
-  };
+  const handleStart = (l: Lecture) =>
+    run(l, () => startLecture(l.id).unwrap(), "Lecture started — the room is open");
+  const handleEnd = (l: Lecture) =>
+    run(l, () => endLecture(l.id).unwrap(), "Lecture ended");
+  const handleCancel = (l: Lecture) =>
+    run(l, () => cancelLecture(l.id).unwrap(), "Lecture cancelled");
+  const handleDelete = (l: Lecture) =>
+    run(l, () => deleteLecture(l.id).unwrap(), "Lecture deleted");
 
-  const startEdit = (lecture: { title: string; description: string; recordingEnabled: boolean; id: number }) => {
-    setEditingId(lecture.id);
-    setEditTitle(lecture.title);
-    setEditDescription(lecture.description ?? "");
-    setEditRecordingEnabled(lecture.recordingEnabled);
-  };
+  function openCreate() {
+    setEditing(null);
+    setFormOpen(true);
+  }
 
-  const submitEdit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!editingId) return;
-    try {
-      await updateLecture({
-        id: editingId,
-        body: {
-          title: editTitle,
-          description: editDescription,
-          recordingEnabled: editRecordingEnabled,
-        },
-      }).unwrap();
-      toast.success("Lecture updated");
-      setEditingId(null);
-    } catch (err) {
-      toast.error(apiErrorMessage(err as FetchBaseQueryError));
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      await deleteLecture(id).unwrap();
-      toast.success("Lecture deleted");
-    } catch (err) {
-      toast.error(apiErrorMessage(err as FetchBaseQueryError));
-    }
-  };
+  function openEdit(lecture: Lecture) {
+    setEditing(lecture);
+    setFormOpen(true);
+  }
 
   return (
-    <PageTheme title="Lectures" subtitle="Run live sessions, monitor recordings, and manage lecture rooms.">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">{data?.total ?? 0} lecture(s)</div>
+    <PageTheme
+      title="Lectures"
+      subtitle="Schedule sessions, run them live, and find their recordings in the batch drive."
+    >
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span>
+            {total} lecture{total === 1 ? "" : "s"}
+          </span>
+          {liveCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+              {liveCount} live now
+            </span>
+          )}
+          {pendingRecordings > 0 && (
+            <span className="text-xs">{pendingRecordings} recording(s) processing</span>
+          )}
+        </div>
+
         {can("lecture.create") && (
-          <Button asChild variant="default">
-            <Link href="/dashboard/lectures/new">Create lecture</Link>
+          <Button onClick={openCreate}>
+            <CalendarPlus className="mr-2 h-4 w-4" /> Schedule lecture
           </Button>
         )}
       </div>
 
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Tabs
+          value={status}
+          onValueChange={(v) => {
+            setStatus(v);
+            setPage(1);
+          }}
+          className="w-full sm:w-auto"
+        >
+          <TabsList>
+            {FILTERS.map((f) => (
+              <TabsTrigger key={f.value || "all"} value={f.value}>
+                {f.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="relative sm:ml-auto sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by title"
+            className="pl-8"
+          />
+        </div>
+      </div>
+
       {isLoading ? (
-        <div className="flex h-40 items-center justify-center">
+        <div className="flex h-64 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : items.length === 0 ? (
-        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-          No lectures yet.
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+            <Video className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-medium">
+              {search || status ? "No lectures match this view" : "No lectures yet"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {search || status
+                ? "Try a different filter or search term."
+                : "Schedule one to open a live room for a batch."}
+            </p>
+          </div>
+          {!search && !status && can("lecture.create") && (
+            <Button variant="outline" onClick={openCreate}>
+              <CalendarPlus className="mr-2 h-4 w-4" /> Schedule lecture
+            </Button>
+          )}
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {items.map((lecture) => (
-            <div key={lecture.id} className="rounded-lg border bg-card p-4 shadow-sm">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Video className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold">{lecture.title}</h3>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs uppercase text-muted-foreground">
-                      {lecture.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{lecture.description || "No description provided."}</p>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><CalendarDays className="h-4 w-4" />{new Date(lecture.startTime).toLocaleString()}</span>
-                    {lecture.roomName && <span className="font-mono text-xs">Room: {lecture.roomName}</span>}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {lecture.status !== "live" ? (
-                    <Button size="sm" variant="outline" onClick={() => void handleStart(lecture.id)}>
-                      <PlayCircle className="mr-2 h-4 w-4" /> Start
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => void handleEnd(lecture.id)}>
-                      <Square className="mr-2 h-4 w-4" /> End
-                    </Button>
-                  )}
-                  <Dialog open={editingId === lecture.id} onOpenChange={(open) => !open && setEditingId(null)}>
-                    <DialogTrigger asChild>
-                      <Button size="sm" variant="secondary" onClick={() => startEdit(lecture)}>
-                        <Pencil className="mr-2 h-4 w-4" /> Edit
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <form onSubmit={submitEdit}>
-                        <DialogHeader>
-                          <DialogTitle>Edit lecture</DialogTitle>
-                          <DialogDescription>Update the lecture title, description, and recording preference.</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="edit-title">Title</Label>
-                            <Input id="edit-title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="edit-description">Description</Label>
-                            <Textarea id="edit-description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
-                          </div>
-                          <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={editRecordingEnabled} onChange={(e) => setEditRecordingEnabled(e.target.checked)} />
-                            Enable recording
-                          </label>
-                        </div>
-                        <DialogFooter>
-                          <Button type="submit">Save</Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                  <Button size="sm" variant="destructive" onClick={() => handleDelete(lecture.id)}>
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                  <Button size="sm" variant="secondary" asChild>
-                    <Link href={`/dashboard/lectures/${lecture.id}`}>Open</Link>
-                  </Button>
-                </div>
-              </div>
-
-              {lecture.recordingUrl && (
-                <div className="mt-4 rounded-md border border-dashed bg-muted/40 p-3 text-sm">
-                  <div className="font-medium">Recording</div>
-                  <a href={lecture.recordingUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                    Open recording
-                  </a>
-                </div>
-              )}
-            </div>
+            <LectureCard
+              key={lecture.id}
+              lecture={lecture}
+              can={can}
+              busy={busyId === lecture.id}
+              onStart={handleStart}
+              onEnd={handleEnd}
+              onCancel={handleCancel}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+            />
           ))}
         </div>
       )}
 
-      <div className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
-        <span>{isFetching ? "Refreshing…" : ""}</span>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <span>Page {page}</span>
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{isFetching ? "Refreshing…" : `Page ${page} of ${totalPages}`}</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
+
+      <LectureFormDialog
+        lecture={editing ?? undefined}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+      />
     </PageTheme>
   );
 }

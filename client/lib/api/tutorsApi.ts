@@ -30,6 +30,8 @@ export const tutorsApi = createApi({
       providesTags: ["Tutor"],
     }),
 
+    // The response carries a one-time temp_password: creating a tutor also
+    // creates the login they sign in with, atomically.
     createTutor: build.mutation<Tutor, CreateTutorInput>({
       query: (body) => ({ url: "/tutors", method: "POST", body }),
       transformResponse: (r: Envelope<Tutor>) => r.data as Tutor,

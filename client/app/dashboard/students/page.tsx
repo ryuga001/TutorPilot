@@ -10,6 +10,7 @@ import {
   PersonFormDrawer,
   type PersonFormValues,
 } from "@/components/dashboard/people/PersonFormDrawer";
+import { CredentialsDialog } from "@/components/dashboard/people/CredentialsDialog";
 import PageTheme from "@/components/pagetheme/PageTheme";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/table/DataTable";
@@ -47,6 +48,13 @@ function StudentsList() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
 
+  // Shown once, right after a student (and their login) is created.
+  const [credentials, setCredentials] = useState<{
+    email: string;
+    tempPassword: string;
+    name: string;
+  } | null>(null);
+
   const [createStudent, { isLoading: creating }] = useCreateStudentMutation();
   const [updateStudent, { isLoading: updating }] = useUpdateStudentMutation();
   const [deleteStudent] = useDeleteStudentMutation();
@@ -73,7 +81,16 @@ function StudentsList() {
         await updateStudent({ id: editing.id, body: values }).unwrap();
         toast.success("Student updated");
       } else {
-        await createStudent(values).unwrap();
+        // Creating a student also creates the login they sign in with, and the
+        // response carries the temporary password once.
+        const created = await createStudent(values).unwrap();
+        if (created.temp_password) {
+          setCredentials({
+            email: created.email,
+            tempPassword: created.temp_password,
+            name: `${created.first_name} ${created.last_name}`,
+          });
+        }
         toast.success("Student created");
       }
       setDrawerOpen(false);
@@ -228,6 +245,13 @@ function StudentsList() {
         profileImageUrl={editing?.profile_image_url}
         onUploadImage={editing ? handleUploadImage : undefined}
         uploadingImage={uploadingImage}
+      />
+
+      <CredentialsDialog
+        tempPassword={credentials?.tempPassword ?? null}
+        email={credentials?.email}
+        personName={credentials?.name}
+        onClose={() => setCredentials(null)}
       />
     </PageTheme>
   );

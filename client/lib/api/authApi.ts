@@ -2,6 +2,7 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 import { baseQueryWithReauth } from "@/lib/api/baseQuery";
 import type {
   AuthResponse,
+  ChangePasswordInput,
   Envelope,
   LoginInput,
   RegisterInput,
@@ -49,6 +50,12 @@ export const authApi = createApi({
       query: (body) => ({ url: "/auth/reset-password", method: "POST", body }),
     }),
 
+    changePassword: build.mutation<AuthResponse, ChangePasswordInput>({
+      query: (body) => ({ url: "/auth/change-password", method: "POST", body }),
+      transformResponse: (r: Envelope<AuthResponse>) => r.data as AuthResponse,
+      invalidatesTags: ["Me"],
+    }),
+
     logout: build.mutation<MessageResponse, { refresh_token: string }>({
       query: (body) => ({ url: "/auth/logout", method: "POST", body }),
       invalidatesTags: ["Me"],
@@ -75,6 +82,7 @@ export const {
   useVerifyEmailMutation,
   useForgotPasswordMutation,
   useResetPasswordMutation,
+  useChangePasswordMutation,
   useLogoutMutation,
   useGetMeQuery,
   useGetPrivilegesQuery,

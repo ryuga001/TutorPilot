@@ -10,6 +10,7 @@ import {
   PersonFormDrawer,
   type PersonFormValues,
 } from "@/components/dashboard/people/PersonFormDrawer";
+import { CredentialsDialog } from "@/components/dashboard/people/CredentialsDialog";
 import PageTheme from "@/components/pagetheme/PageTheme";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/table/DataTable";
@@ -47,6 +48,13 @@ function TutorsList() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Tutor | null>(null);
 
+  // Shown once, right after a tutor (and their login) is created.
+  const [credentials, setCredentials] = useState<{
+    email: string;
+    tempPassword: string;
+    name: string;
+  } | null>(null);
+
   const [createTutor, { isLoading: creating }] = useCreateTutorMutation();
   const [updateTutor, { isLoading: updating }] = useUpdateTutorMutation();
   const [deleteTutor] = useDeleteTutorMutation();
@@ -73,7 +81,16 @@ function TutorsList() {
         await updateTutor({ id: editing.id, body: values }).unwrap();
         toast.success("Tutor updated");
       } else {
-        await createTutor(values).unwrap();
+        // Creating a tutor also creates the login they sign in with, and the
+        // response carries the temporary password once.
+        const created = await createTutor(values).unwrap();
+        if (created.temp_password) {
+          setCredentials({
+            email: created.email,
+            tempPassword: created.temp_password,
+            name: `${created.first_name} ${created.last_name}`,
+          });
+        }
         toast.success("Tutor created");
       }
       setDrawerOpen(false);
@@ -235,6 +252,13 @@ function TutorsList() {
         profileImageUrl={editing?.profile_image_url}
         onUploadImage={editing ? handleUploadImage : undefined}
         uploadingImage={uploadingImage}
+      />
+
+      <CredentialsDialog
+        tempPassword={credentials?.tempPassword ?? null}
+        email={credentials?.email}
+        personName={credentials?.name}
+        onClose={() => setCredentials(null)}
       />
     </PageTheme>
   );

@@ -63,9 +63,7 @@ export default function LoginPage() {
     <Card>
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
-        <CardDescription>
-          Access your TutorPilot dashboard.
-        </CardDescription>
+        <CardDescription>Access your TutorPilot dashboard.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>

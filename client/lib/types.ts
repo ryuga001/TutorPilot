@@ -14,15 +14,18 @@ export interface Paginated<T> {
   page_size: number;
 }
 
+/** Which kind of principal an attendance row belongs to. */
+export type SubjectType = "admin" | "tutor" | "student";
+
 export interface UserView {
   id: number;
   customer_id: number;
   email: string;
+  first_name: string;
+  last_name: string;
   role: string;
   privileges?: string[];
   created_at: string;
-  first_name?: string;
-  last_name?: string;
 }
 
 export interface TokenPair {
@@ -62,6 +65,10 @@ export interface ResetPasswordInput {
   new_password: string;
 }
 
+export interface ChangePasswordInput {
+  current_password: string;
+  new_password: string;
+}
 
 export type CourseStatus = "draft" | "published";
 
@@ -103,38 +110,81 @@ export interface Course {
   modules?: CourseModule[];
 }
 
+export type LectureStatus = "scheduled" | "live" | "ended" | "cancelled";
+
+/** A recording is not ready when a lecture ends: egress finalises asynchronously,
+ *  so it passes through "processing" before the file exists. */
+export type RecordingStatus =
+  | "none"
+  | "starting"
+  | "recording"
+  | "processing"
+  | "ready"
+  | "failed";
+
 export interface Lecture {
   id: number;
-  batchId: number;
-  moduleId?: number;
-  tutorId?: number;
+  batch_id: number;
+  module_id?: number;
+  tutor_id?: number;
   title: string;
   description: string;
-  status: "scheduled" | "live" | "ended";
-  roomName?: string;
-  recordingEnabled: boolean;
-  recordingUrl?: string;
-  startTime: string;
-  endTime?: string;
-  createdAt: string;
-  updatedAt: string;
+  status: LectureStatus;
+  room_name?: string;
+
+  recording_enabled: boolean;
+  recording_status: RecordingStatus;
+  recording_url?: string;
+  recording_duration_seconds?: number;
+  recording_size_bytes?: number;
+
+  /** Scheduled start. */
+  start_time: string;
+  /** When the lecture was actually started. */
+  actual_start_at?: string;
+  end_time?: string;
+
+  created_at: string;
+  updated_at: string;
+
+  /** Denormalised by the API so a listing needs no follow-up requests. */
+  batch_name?: string;
+  course_title?: string;
+  module_title?: string;
+  tutor_name?: string;
+
+  /** Whether the current user may publish audio/video in this lecture. */
+  can_publish: boolean;
 }
 
 export interface CreateLectureInput {
-  batchId: number;
-  moduleId?: number;
-  tutorId?: number;
+  batch_id: number;
+  module_id?: number;
+  tutor_id?: number;
   title: string;
   description?: string;
-  recordingEnabled?: boolean;
-  startTime: string;
-  endTime?: string;
+  recording_enabled?: boolean;
+  start_time: string;
+  end_time?: string;
 }
 
-export interface UpdateLectureInput extends Partial<CreateLectureInput> {}
+export type UpdateLectureInput = Omit<CreateLectureInput, "batch_id">;
 
 export interface LectureJoinResponse {
   token: string;
+  room_name: string;
+  identity: string;
+  can_publish: boolean;
+}
+
+export interface LectureAttendance {
+  user_id: number;
+  subject_type: SubjectType;
+  subject_id?: number;
+  display_name: string;
+  joined_at: string;
+  left_at?: string;
+  seconds_present?: number;
 }
 
 export interface CreateCourseInput {
@@ -186,6 +236,10 @@ export interface Tutor {
   address?: Address;
   created_at: string;
   updated_at: string;
+  /** Only present in the response to creating the tutor: the login is created
+   *  atomically with the record, and this is the one time its password is
+   *  readable. */
+  temp_password?: string;
 }
 
 export interface CreateTutorInput {
@@ -209,6 +263,10 @@ export interface Student {
   address?: Address;
   created_at: string;
   updated_at: string;
+  /** Only present in the response to creating the student: the login is created
+   *  atomically with the record, and this is the one time its password is
+   *  readable. */
+  temp_password?: string;
 }
 
 export interface CreateStudentInput {
@@ -295,5 +353,8 @@ export interface DriveNode {
   url?: string;
   content_type?: string;
   size_bytes?: number;
+  /** Managed by the application — the lecture recordings folder. Cannot be
+   *  renamed or deleted. */
+  is_system?: boolean;
   created_at: string;
 }

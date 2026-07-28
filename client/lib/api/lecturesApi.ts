@@ -5,6 +5,7 @@ import type {
   CreateLectureInput,
   Envelope,
   Lecture,
+  LectureAttendance,
   LectureJoinResponse,
   Paginated,
   UpdateLectureInput,
@@ -15,18 +16,18 @@ interface ListArgs {
   page_size?: number;
   search?: string;
   status?: string;
-  batchId?: number;
+  batch_id?: number;
 }
 
 export const lecturesApi = createApi({
   reducerPath: "lecturesApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Lecture", "LectureList"],
+  tagTypes: ["Lecture", "LectureList", "LectureAttendance"],
   endpoints: (build) => ({
     listLectures: build.query<Paginated<Lecture>, ListArgs>({
-      query: ({ page = 1, page_size = 10, search = "", status = "", batchId } = {}) => ({
+      query: ({ page = 1, page_size = 12, search = "", status = "", batch_id } = {}) => ({
         url: "/lectures",
-        params: { page, page_size, search, status, batchId },
+        params: { page, page_size, search, status, batch_id },
       }),
       transformResponse: (r: Envelope<Paginated<Lecture>>) => r.data as Paginated<Lecture>,
       providesTags: ["LectureList"],
@@ -64,12 +65,28 @@ export const lecturesApi = createApi({
     endLecture: build.mutation<Lecture, number>({
       query: (id) => ({ url: `/lectures/${id}/end`, method: "POST" }),
       transformResponse: (r: Envelope<Lecture>) => r.data as Lecture,
+      invalidatesTags: (_res, _err, id) => [
+        { type: "Lecture", id },
+        "LectureList",
+        "LectureAttendance",
+      ],
+    }),
+
+    cancelLecture: build.mutation<Lecture, number>({
+      query: (id) => ({ url: `/lectures/${id}/cancel`, method: "POST" }),
+      transformResponse: (r: Envelope<Lecture>) => r.data as Lecture,
       invalidatesTags: (_res, _err, id) => [{ type: "Lecture", id }, "LectureList"],
     }),
 
     joinLecture: build.mutation<LectureJoinResponse, number>({
       query: (id) => ({ url: `/lectures/${id}/join`, method: "POST" }),
       transformResponse: (r: Envelope<LectureJoinResponse>) => r.data as LectureJoinResponse,
+    }),
+
+    lectureAttendance: build.query<LectureAttendance[], number>({
+      query: (id) => `/lectures/${id}/attendance`,
+      transformResponse: (r: Envelope<LectureAttendance[]>) => r.data ?? [],
+      providesTags: (_res, _err, id) => [{ type: "LectureAttendance", id }],
     }),
   }),
 });
@@ -82,5 +99,7 @@ export const {
   useDeleteLectureMutation,
   useStartLectureMutation,
   useEndLectureMutation,
+  useCancelLectureMutation,
   useJoinLectureMutation,
+  useLectureAttendanceQuery,
 } = lecturesApi;

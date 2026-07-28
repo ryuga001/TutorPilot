@@ -8,17 +8,37 @@ import { logout, setTokens } from "@/lib/features/authSlice";
 import type { Envelope, TokenPair } from "@/lib/types";
 import type { RootState } from "@/lib/store";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
+// The API host has to mirror the browser host, because the server resolves the
+// tenant from the subdomain: a request from acme.localhost:3000 must reach
+// acme.localhost:8080, or it arrives on the root host with no organization and
+// only staff and tutors can sign in.
+//
+// NEXT_PUBLIC_API_URL still overrides everything, for deployments where the API
+// lives on a fixed host.
+const API_PORT = process.env.NEXT_PUBLIC_API_PORT ?? "8080";
 
-const rawBaseQuery = fetchBaseQuery({
-  baseUrl: API_URL,
-  prepareHeaders: (headers, { getState }) => {
-    const token = (getState() as RootState).auth.accessToken;
-    if (token) headers.set("authorization", `Bearer ${token}`);
-    return headers;
-  },
-});
+function apiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window === "undefined") return `http://localhost:${API_PORT}/api/v1`;
+
+  const { protocol, hostname } = window.location;
+  return `${protocol}//${hostname}:${API_PORT}/api/v1`;
+}
+
+// Built on first use rather than at module load, so window.location is available.
+let baseQuery: ReturnType<typeof fetchBaseQuery> | null = null;
+
+const rawBaseQuery: ReturnType<typeof fetchBaseQuery> = (args, api, extraOptions) => {
+  baseQuery ??= fetchBaseQuery({
+    baseUrl: apiBaseUrl(),
+    prepareHeaders: (headers, { getState }) => {
+      const token = (getState() as RootState).auth.accessToken;
+      if (token) headers.set("authorization", `Bearer ${token}`);
+      return headers;
+    },
+  });
+  return baseQuery(args, api, extraOptions);
+};
 
 // Single in-flight refresh shared across concurrent 401s.
 let refreshPromise: ReturnType<typeof rawBaseQuery> | null = null;
