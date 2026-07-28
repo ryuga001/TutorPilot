@@ -1,18 +1,3 @@
--- Tutors and students stop duplicating identity. A tutor/student *is* a
--- dashboard_users row (email, password, name) plus a small extras row holding
--- only what dashboard_users doesn't have (phone, designation, address, photo).
--- The extras row's primary key IS the dashboard_users id — there is no separate
--- surrogate id, so a tutor's id, their JWT uid, and every FK that points at them
--- (batch_tutors.tutor_id, lectures.tutor_id, ...) are all the same integer.
---
--- This also lets tutors/students log in through the exact same path as an admin:
--- dashboard_users already carries role_id/role_privileges, so no separate
--- subject-type or per-row scoping machinery is needed for authentication itself.
-
--- === Part 1: privileges + roles, for every existing tenant =================
--- New tenants already get these from newTenantRoles in
--- internal/modules/auth/repository.go; existing tenants need a backfill.
-
 INSERT INTO privileges (name, type) VALUES
 ('portal.access',     'portal'),
 ('lecture.join',      'lecture'),
@@ -24,8 +9,6 @@ INSERT INTO privileges (name, type) VALUES
 ('manage_members',    'admin')
 ON CONFLICT (name) DO NOTHING;
 
--- Existing tenants' Admin roles were granted a fixed snapshot of the catalog at
--- registration time, so privileges added since then must be granted explicitly.
 INSERT INTO role_privileges (role_id, privilege_id)
 SELECT r.id, p.id
 FROM roles r
@@ -44,9 +27,6 @@ INSERT INTO roles (name, type, customer_id)
 SELECT 'Student', 'student', c.id FROM customers c
 ON CONFLICT (customer_id, name) DO NOTHING;
 
--- A student looks at their own courses/batches, joins their lectures, watches
--- recordings, edits their own profile. Mirrors studentPrivileges in
--- internal/modules/auth/repository.go.
 INSERT INTO role_privileges (role_id, privilege_id)
 SELECT r.id, p.id
 FROM roles r
@@ -57,8 +37,6 @@ JOIN privileges p ON p.name = ANY (ARRAY[
 WHERE r.name = 'Student'
 ON CONFLICT DO NOTHING;
 
--- A tutor gets everything a student gets, plus running lectures and managing
--- batch material. Mirrors tutorPrivileges (student ∪ tutorOnlyPrivileges).
 INSERT INTO role_privileges (role_id, privilege_id)
 SELECT r.id, p.id
 FROM roles r
@@ -71,27 +49,14 @@ JOIN privileges p ON p.name = ANY (ARRAY[
 WHERE r.name = 'Tutor'
 ON CONFLICT DO NOTHING;
 
--- === Part 2: dashboard_users gains a name =====================================
--- Every principal type now needs its own name; previously only the tenant
--- contact (customers.first_name/last_name) had one.
-
 ALTER TABLE dashboard_users
     ADD COLUMN first_name VARCHAR(100) NOT NULL DEFAULT '',
     ADD COLUMN last_name  VARCHAR(100) NOT NULL DEFAULT '';
 
--- Best-effort backfill for existing admins: the org's contact name is the
--- closest thing to a personal name recorded for them today.
 UPDATE dashboard_users du
 SET first_name = c.first_name, last_name = c.last_name
 FROM customers c
 WHERE c.id = du.customer_id AND du.first_name = '';
-
--- === Part 3: tutors becomes a dashboard_users extension =======================
--- Note: dashboard_users.email is unique across the whole installation (a
--- pre-existing constraint, not new here). If any two tutors in different
--- tenants happen to share an email address, this step fails loudly rather than
--- silently merging or dropping a row — which is the correct outcome; resolve
--- the collision by hand and re-run.
 
 ALTER TABLE tutors ADD COLUMN dashboard_user_id INT;
 
@@ -113,8 +78,6 @@ WHERE t.customer_id = inserted.customer_id AND t.email = inserted.email;
 
 ALTER TABLE tutors ALTER COLUMN dashboard_user_id SET NOT NULL;
 
--- Remap every foreign key that pointed at tutors.id onto the new
--- dashboard_user_id, before the old id disappears.
 ALTER TABLE batch_module_tutors ADD COLUMN tutor_dashboard_user_id INT;
 UPDATE batch_module_tutors bmt SET tutor_dashboard_user_id = t.dashboard_user_id
 FROM tutors t WHERE t.id = bmt.tutor_id;
@@ -153,16 +116,11 @@ ALTER TABLE batch_tutors ADD CONSTRAINT batch_tutors_batch_id_tutor_id_key UNIQU
 ALTER TABLE lectures DROP COLUMN tutor_id;
 ALTER TABLE lectures RENAME COLUMN tutor_dashboard_user_id TO tutor_id;
 
--- Drop the columns that moved to dashboard_users, then move the primary key.
--- customer_id goes too: it's available via the dashboard_user_id join, and
--- dashboard_users -> customers already cascades tutors' deletion transitively
--- (customers delete -> dashboard_users delete -> tutors delete), so tenant
--- integrity does not depend on tutors carrying its own copy.
 ALTER TABLE tutors DROP CONSTRAINT tutors_pkey;
 ALTER TABLE tutors DROP COLUMN id;
 ALTER TABLE tutors DROP COLUMN first_name;
 ALTER TABLE tutors DROP COLUMN last_name;
-ALTER TABLE tutors DROP COLUMN email; -- also drops UNIQUE(customer_id, email)
+ALTER TABLE tutors DROP COLUMN email;
 ALTER TABLE tutors DROP COLUMN customer_id;
 
 ALTER TABLE tutors
@@ -181,8 +139,6 @@ ALTER TABLE batch_tutors
 ALTER TABLE lectures
     ADD CONSTRAINT lectures_tutor_id_fkey FOREIGN KEY (tutor_id)
         REFERENCES tutors(dashboard_user_id) ON DELETE SET NULL;
-
--- === Part 4: students becomes a dashboard_users extension, same pattern ======
 
 ALTER TABLE students ADD COLUMN dashboard_user_id INT;
 

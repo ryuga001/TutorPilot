@@ -283,11 +283,11 @@ func (r *Repository) Transition(ctx context.Context, sc scope.Scope, id int64, f
 	}
 	tag, err := r.db.Exec(ctx, `
 		UPDATE lectures SET
-			status = $4,
-			actual_start_at = CASE WHEN $4 = 'live' THEN now() ELSE actual_start_at END,
-			end_time = CASE WHEN $4 IN ('ended', 'cancelled') THEN now() ELSE end_time END,
+			status = $4::text,
+			actual_start_at = CASE WHEN $4::text = 'live' THEN now() ELSE actual_start_at END,
+			end_time = CASE WHEN $4::text IN ('ended', 'cancelled') THEN now() ELSE end_time END,
 			updated_at = now()
-		WHERE customer_id = $1 AND id = $2 AND status = $3`,
+		WHERE customer_id = $1 AND id = $2 AND status = $3::text`,
 		sc.CustomerID, id, from, to)
 	if err != nil {
 		return nil, err

@@ -2,6 +2,7 @@ package lecture
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -51,6 +52,7 @@ func failErr(c *gin.Context, err error) {
 	case errors.Is(err, ErrLiveKitUnavailable):
 		httpx.Fail(c, http.StatusServiceUnavailable, err.Error())
 	default:
+		log.Printf("lecture: unhandled error: %v", err)
 		httpx.Fail(c, http.StatusInternalServerError, "lecture operation failed")
 	}
 }

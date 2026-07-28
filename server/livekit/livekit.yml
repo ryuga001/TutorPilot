@@ -9,3 +9,16 @@ keys:
 
 logging:
   level: info
+
+# Egress workers register with livekit-server over Redis; without this block,
+# StartRoomCompositeEgress calls sit with no worker to pick them up.
+redis:
+  address: redis:6379
+
+# Delivered to the Go API's /api/v1/webhooks/livekit route, which is what
+# advances recording_status and closes attendance rows. The API runs on the
+# host, not in this compose network, so host-gateway is required to reach it.
+webhook:
+  api_key: tutorpilot
+  urls:
+    - http://host.docker.internal:8080/api/v1/webhooks/livekit

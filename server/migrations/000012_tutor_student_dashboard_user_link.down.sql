@@ -1,9 +1,3 @@
--- Best-effort revert. Restored tutors/students rows get a fresh surrogate id
--- (the original ids are gone) and their name/email copied back from the
--- dashboard_users row that is about to be deleted.
-
--- === Students back to owning their own identity =============================
-
 ALTER TABLE students
     DROP CONSTRAINT IF EXISTS students_dashboard_user_id_fkey,
     DROP CONSTRAINT IF EXISTS students_pkey;
@@ -42,17 +36,12 @@ ALTER TABLE batch_students ADD CONSTRAINT batch_students_student_id_fkey
 ALTER TABLE batch_students ADD CONSTRAINT batch_students_batch_id_student_id_key
     UNIQUE (batch_id, student_id);
 
--- Drop the dashboard_users rows this migration created for students; deleting
--- them cascades to null out students.dashboard_user_id via nothing (column is
--- about to be dropped anyway).
 DELETE FROM dashboard_users du
 USING students s
 WHERE s.dashboard_user_id = du.id
   AND du.password_hash = '$migration$disabled-until-password-reset';
 
 ALTER TABLE students DROP COLUMN dashboard_user_id;
-
--- === Tutors back to owning their own identity ================================
 
 ALTER TABLE tutors
     DROP CONSTRAINT IF EXISTS tutors_dashboard_user_id_fkey,
@@ -116,9 +105,6 @@ USING tutors t
 WHERE t.dashboard_user_id = du.id
   AND du.password_hash = '$migration$disabled-until-password-reset';
 
-ALTER TABLE tutors DROP COLUMN dashboard_user_id;
-
--- === Roles/privileges/name columns ===========================================
 
 DELETE FROM role_privileges
 WHERE role_id IN (SELECT id FROM roles WHERE name IN ('Tutor', 'Student'));
