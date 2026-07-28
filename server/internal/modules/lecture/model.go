@@ -2,37 +2,94 @@ package lecture
 
 import "time"
 
+// Lecture lifecycle. A lecture is scheduled, may be cancelled before it starts,
+// and once live can only end.
 const (
-	LectureStatusScheduled = "scheduled"
-	LectureStatusLive      = "live"
-	LectureStatusEnded     = "ended"
+	StatusScheduled = "scheduled"
+	StatusLive      = "live"
+	StatusEnded     = "ended"
+	StatusCancelled = "cancelled"
 )
 
+// Recording lifecycle. Ending a lecture does not produce a file: egress finalises
+// asynchronously, so the recording passes through processing before it is ready.
+const (
+	RecordingNone       = "none"
+	RecordingStarting   = "starting"
+	RecordingRecording  = "recording"
+	RecordingProcessing = "processing"
+	RecordingReady      = "ready"
+	RecordingFailed     = "failed"
+)
+
+// transitions is the whole state machine. Anything absent is refused, which is
+// what stops an ended lecture from being started again.
+var transitions = map[string][]string{
+	StatusScheduled: {StatusLive, StatusCancelled},
+	StatusLive:      {StatusEnded},
+	StatusEnded:     nil,
+	StatusCancelled: nil,
+}
+
+// canTransition reports whether a lecture may move between two states.
+func canTransition(from, to string) bool {
+	for _, allowed := range transitions[from] {
+		if allowed == to {
+			return true
+		}
+	}
+	return false
+}
+
 type Lecture struct {
-	ID         int64 `json:"id"`
-	CustomerID int   `json:"customerId"`
+	ID         int64
+	CustomerID int
 
-	BatchID  int  `json:"batchId"`
-	ModuleID *int `json:"moduleId"`
-	TutorID  *int `json:"tutorId"`
+	BatchID  int
+	ModuleID *int
+	TutorID  *int
 
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title       string
+	Description string
 
-	RoomName *string `json:"roomName"`
+	RoomName *string
+	EgressID *string
 
-	EgressID *string `json:"-"`
+	Status string
 
-	Status string `json:"status"`
+	RecordingEnabled   bool
+	RecordingStatus    string
+	RecordingURL       *string
+	RecordingObjectKey *string
+	RecordingNodeID    *int
+	RecordingDuration  *int
+	RecordingSize      *int64
 
-	RecordingEnabled bool    `json:"recordingEnabled"`
-	RecordingURL     *string `json:"recordingUrl"`
+	StartTime     time.Time
+	ActualStartAt *time.Time
+	EndTime       *time.Time
 
-	StartTime time.Time  `json:"startTime"`
-	EndTime   *time.Time `json:"endTime"`
+	CreatedBy *int
+	CreatedAt time.Time
+	UpdatedAt time.Time
 
-	CreatedBy *int `json:"createdBy"`
+	// Denormalised for listings, so the client does not have to fetch the batch,
+	// course, module and tutor separately for every row.
+	BatchName   string
+	CourseTitle string
+	ModuleTitle *string
+	TutorName   *string
+}
 
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+// Attendance is one participant's presence in one lecture session.
+type Attendance struct {
+	ID             int
+	LectureID      int64
+	UserID         int
+	SubjectType    string
+	SubjectID      *int
+	DisplayName    string
+	JoinedAt       time.Time
+	LeftAt         *time.Time
+	SecondsPresent *int
 }

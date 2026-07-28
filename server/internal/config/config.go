@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type Config struct {
 	SMTPFrom string
 
 	OTPTTL       time.Duration
+	InviteTTL    time.Duration
 	AppVerifyURL string
 
 	MinIOEndpoint  string
@@ -40,6 +42,11 @@ type Config struct {
 	LiveKitURL    string
 	LiveKitKey    string
 	LiveKitSecret string
+
+	LiveKitRoomEmptyTimeout time.Duration
+	LiveKitMaxParticipants  int
+
+	LectureJoinTokenTTL time.Duration
 }
 
 func Load() (*Config, error) {
@@ -64,9 +71,10 @@ func Load() (*Config, error) {
 		MinIOPublicURL: getEnv("MINIO_PUBLIC_URL", "http://localhost:9000"),
 		MinIOUseSSL:    getBool("MINIO_USE_SSL", false),
 
-		LiveKitURL:    getEnv("LIVEKIT_URL", "http://localhost:7880"),
-		LiveKitKey:    getEnv("LIVEKIT_API_KEY", "tutorpilot"),
-		LiveKitSecret: getEnv("LIVEKIT_API_SECRET", "tutorpilot"),
+		LiveKitURL:             getEnv("LIVEKIT_URL", "http://localhost:7880"),
+		LiveKitKey:             getEnv("LIVEKIT_API_KEY", "tutorpilot"),
+		LiveKitSecret:          getEnv("LIVEKIT_API_SECRET", "tutorpilot"),
+		LiveKitMaxParticipants: getInt("LIVEKIT_MAX_PARTICIPANTS", 100),
 	}
 
 	var err error
@@ -77,6 +85,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.OTPTTL, err = getDuration("OTP_TTL", 5*time.Minute); err != nil {
+		return nil, err
+	}
+	if cfg.InviteTTL, err = getDuration("INVITE_TTL", 72*time.Hour); err != nil {
+		return nil, err
+	}
+	if cfg.LiveKitRoomEmptyTimeout, err = getDuration("LIVEKIT_ROOM_EMPTY_TIMEOUT", 5*time.Minute); err != nil {
+		return nil, err
+	}
+	if cfg.LectureJoinTokenTTL, err = getDuration("LECTURE_JOIN_TOKEN_TTL", 2*time.Hour); err != nil {
 		return nil, err
 	}
 
@@ -119,6 +136,18 @@ func getBool(key string, fallback bool) bool {
 	default:
 		return false
 	}
+}
+
+func getInt(key string, fallback int) int {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 func getDuration(key string, fallback time.Duration) (time.Duration, error) {

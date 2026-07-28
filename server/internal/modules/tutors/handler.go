@@ -39,6 +39,8 @@ func failErr(c *gin.Context, err error) {
 		httpx.Fail(c, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrEmailTaken):
 		httpx.Fail(c, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrNoTutorRole):
+		httpx.Fail(c, http.StatusInternalServerError, err.Error())
 	case errors.Is(err, ErrStorageUnavailable):
 		httpx.Fail(c, http.StatusServiceUnavailable, err.Error())
 	default:

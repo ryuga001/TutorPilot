@@ -56,10 +56,14 @@ func NewService(
 }
 
 func (s *Service) SendVerification(ctx context.Context, email string) error {
-	if _, err := s.repo.GetUserByEmail(ctx, email); err == nil {
-		return ErrEmailTaken
-	} else if !errors.Is(err, ErrNotFound) {
+	email = NormalizeEmail(email)
+
+	taken, err := s.repo.EmailTaken(ctx, email)
+	if err != nil {
 		return err
+	}
+	if taken {
+		return ErrEmailTaken
 	}
 
 	otp, err := security.GenerateOTP(6)
@@ -73,6 +77,8 @@ func (s *Service) SendVerification(ctx context.Context, email string) error {
 }
 
 func (s *Service) VerifyEmail(ctx context.Context, email, otp string) error {
+	email = NormalizeEmail(email)
+
 	stored, err := s.store.GetEmailOTP(ctx, email)
 	if errors.Is(err, ErrNotFound) {
 		return ErrInvalidOTP
@@ -92,7 +98,9 @@ func (s *Service) VerifyEmail(ctx context.Context, email, otp string) error {
 // --- Registration (tenant onboarding) ----------------------------------------
 
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResponse, error) {
-	verified, err := s.store.IsEmailVerified(ctx, req.Email)
+	email := NormalizeEmail(req.Email)
+
+	verified, err := s.store.IsEmailVerified(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -109,14 +117,13 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthRespo
 		return nil, err
 	}
 
-	user, err := s.repo.CreateTenantWithAdmin(ctx,
-		req.OrgName, req.FirstName, req.LastName, req.Email, hash, salt)
+	user, err := s.repo.CreateTenantWithAdmin(ctx, req.OrgName, req.FirstName, req.LastName, email, hash, salt)
 	if err != nil {
 		return nil, err
 	}
 
-	_ = s.store.DeleteEmailVerified(ctx, req.Email)
-	_ = s.store.DeleteEmailOTP(ctx, req.Email)
+	_ = s.store.DeleteEmailVerified(ctx, email)
+	_ = s.store.DeleteEmailOTP(ctx, email)
 
 	return s.buildAuthResponse(ctx, user)
 }
@@ -169,7 +176,7 @@ func (s *Service) Logout(ctx context.Context, raw string) error {
 func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if errors.Is(err, ErrNotFound) {
-		// Do not reveal whether the email exists.
+		// Never disclose whether the address exists.
 		return nil
 	}
 	if err != nil {
@@ -180,17 +187,23 @@ func (s *Service) ForgotPassword(ctx context.Context, email string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.store.SaveResetOTP(ctx, email, security.HashToken(otp), s.otpTTL); err != nil {
+	if err := s.store.SaveResetOTP(ctx, user.Email, security.HashToken(otp), s.otpTTL); err != nil {
 		return err
 	}
-	if err := s.notifier.SendPasswordReset(ctx, user.FirstName, user.Email, otp); err != nil {
+	name := user.FirstName
+	if name == "" {
+		name = user.Email
+	}
+	if err := s.notifier.SendPasswordReset(ctx, name, user.Email, otp); err != nil {
 		log.Printf("auth: failed to send reset email to %s: %v", user.Email, err)
 	}
 	return nil
 }
 
 func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) error {
-	stored, err := s.store.GetResetOTP(ctx, req.Email)
+	email := NormalizeEmail(req.Email)
+
+	stored, err := s.store.GetResetOTP(ctx, email)
 	if errors.Is(err, ErrNotFound) {
 		return ErrInvalidOTP
 	}
@@ -200,21 +213,44 @@ func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) e
 	if stored != security.HashToken(req.OTP) {
 		return ErrInvalidOTP
 	}
-	user, err := s.repo.GetUserByEmail(ctx, req.Email)
+	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return ErrInvalidOTP
 		}
 		return err
 	}
-	hash, err := security.HashPassword(req.NewPassword, user.PasswordSalt, s.pepper)
+	if err := s.setPassword(ctx, user, req.NewPassword); err != nil {
+		return err
+	}
+	return s.store.DeleteResetOTP(ctx, email)
+}
+
+// ChangePassword lets a signed-in user change their own password.
+func (s *Service) ChangePassword(ctx context.Context, userID int, req ChangePasswordRequest) (*AuthResponse, error) {
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !security.CheckPassword(user.PasswordHash, req.CurrentPassword, user.PasswordSalt, s.pepper) {
+		return nil, ErrInvalidCredentials
+	}
+	if err := s.setPassword(ctx, user, req.NewPassword); err != nil {
+		return nil, err
+	}
+	fresh, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildAuthResponse(ctx, fresh)
+}
+
+func (s *Service) setPassword(ctx context.Context, user *DashboardUser, password string) error {
+	hash, err := security.HashPassword(password, user.PasswordSalt, s.pepper)
 	if err != nil {
 		return err
 	}
-	if err := s.repo.UpdatePassword(ctx, user.ID, hash); err != nil {
-		return err
-	}
-	return s.store.DeleteResetOTP(ctx, req.Email)
+	return s.repo.SetPassword(ctx, user.ID, hash)
 }
 
 func (s *Service) GetMe(ctx context.Context, userID int) (*UserView, error) {
@@ -291,7 +327,12 @@ func (s *Service) issueTokens(ctx context.Context, user *DashboardUser) (*TokenP
 	if err != nil {
 		return nil, err
 	}
-	access, _, err := s.jwt.Generate(secret, strconv.Itoa(user.ID), user.Email, user.CustomerID, user.RoleType)
+	access, _, err := s.jwt.Generate(secret, jwtutil.Identity{
+		UserID:     strconv.Itoa(user.ID),
+		Email:      user.Email,
+		CustomerID: user.CustomerID,
+		Role:       user.RoleType,
+	})
 	if err != nil {
 		return nil, err
 	}

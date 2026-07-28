@@ -61,12 +61,14 @@ func failErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpx.Fail(c, http.StatusNotFound, "not found")
-	case errors.Is(err, ErrNameTaken):
+	case errors.Is(err, ErrNameTaken), errors.Is(err, ErrSystemNode):
 		httpx.Fail(c, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrStorageUnavailable):
 		httpx.Fail(c, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, ErrInvalidDateRange), errors.Is(err, ErrEmptyImport):
 		httpx.Fail(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrNoStudentRole):
+		httpx.Fail(c, http.StatusInternalServerError, err.Error())
 	default:
 		httpx.Fail(c, http.StatusInternalServerError, "something went wrong")
 	}

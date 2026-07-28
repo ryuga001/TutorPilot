@@ -146,6 +146,39 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 	httpx.OK(c, http.StatusOK, "password updated", nil)
 }
 
+// ChangePassword godoc
+// @Summary      Change your own password
+// @Tags         auth
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        request  body      ChangePasswordRequest  true  "Current and new password"
+// @Success      200      {object}  httpx.Envelope{data=AuthResponse}
+// @Failure      401      {object}  httpx.Envelope  "current password is wrong"
+// @Router       /auth/change-password [post]
+func (h *Handler) ChangePassword(c *gin.Context) {
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	userID, err := strconv.Atoi(c.GetString(middleware.CtxUserID))
+	if err != nil {
+		httpx.Fail(c, http.StatusUnauthorized, "invalid session")
+		return
+	}
+	res, err := h.svc.ChangePassword(c.Request.Context(), userID, req)
+	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			httpx.Fail(c, http.StatusUnauthorized, "current password is incorrect")
+			return
+		}
+		httpx.Fail(c, http.StatusInternalServerError, "could not change password")
+		return
+	}
+	httpx.OK(c, http.StatusOK, "password changed", res)
+}
+
 // Logout godoc
 // @Summary      Log out (revoke a refresh token)
 // @Tags         auth

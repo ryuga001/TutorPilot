@@ -6,6 +6,11 @@ import (
 	"tutorpilot/internal/pkg/address"
 )
 
+// Student is a dashboard_users row (identity + credentials) joined with the
+// student-specific extras dashboard_users doesn't have. ID is the
+// dashboard_users.id — a student's id, their JWT uid, and
+// batch_students.student_id are all the same integer, since
+// students.dashboard_user_id is the table's own primary key.
 type Student struct {
 	ID              int
 	CustomerID      int
@@ -30,4 +35,11 @@ type StudentView struct {
 	Address         *address.View `json:"address,omitempty"`
 	CreatedAt       time.Time     `json:"created_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
+}
+
+// CreatedStudent is the response to creating a student: the record plus the
+// temporary password, shown exactly once and never on a read path.
+type CreatedStudent struct {
+	StudentView
+	TempPassword string `json:"temp_password"`
 }

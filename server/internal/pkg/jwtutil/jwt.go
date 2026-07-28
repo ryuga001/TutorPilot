@@ -7,12 +7,41 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Subject types. A principal is always exactly one of these; tutors and students
+// additionally carry the id of the directory record they speak for.
+const (
+	SubjectAdmin   = "admin"
+	SubjectTutor   = "tutor"
+	SubjectStudent = "student"
+)
+
 type Claims struct {
 	UserID     string `json:"uid"`
 	Email      string `json:"email"`
 	CustomerID int    `json:"cid"`
 	Role       string `json:"role"`
+
+	// SubjectType decides where the principal may sign in (only admins on the
+	// root host) and, with SubjectID, which rows they can reach.
+	SubjectType string `json:"styp"`
+	SubjectID   int    `json:"sid,omitempty"`
+
+	// MustChangePassword gates every route but the password-change endpoints, so
+	// an invited member cannot use their temporary credentials for anything else.
+	MustChangePassword bool `json:"pwr,omitempty"`
+
 	jwt.RegisteredClaims
+}
+
+// Identity is everything needed to mint an access token for a principal.
+type Identity struct {
+	UserID             string
+	Email              string
+	CustomerID         int
+	Role               string
+	SubjectType        string
+	SubjectID          int
+	MustChangePassword bool
 }
 
 // SecretFunc resolves the HS256 signing secret for the tenant that a token
@@ -32,17 +61,20 @@ func New(accessTTL time.Duration) *Manager {
 
 func (m *Manager) AccessTTL() time.Duration { return m.accessTTL }
 
-// Generate signs an access token for a user with their tenant's secret.
-func (m *Manager) Generate(secret []byte, userID, email string, customerID int, role string) (string, time.Time, error) {
+// Generate signs an access token for a principal with their tenant's secret.
+func (m *Manager) Generate(secret []byte, id Identity) (string, time.Time, error) {
 	now := time.Now()
 	exp := now.Add(m.accessTTL)
 	claims := Claims{
-		UserID:     userID,
-		Email:      email,
-		CustomerID: customerID,
-		Role:       role,
+		UserID:             id.UserID,
+		Email:              id.Email,
+		CustomerID:         id.CustomerID,
+		Role:               id.Role,
+		SubjectType:        id.SubjectType,
+		SubjectID:          id.SubjectID,
+		MustChangePassword: id.MustChangePassword,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userID,
+			Subject:   id.UserID,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
@@ -67,6 +99,10 @@ func (m *Manager) Parse(tokenStr string, secretFor SecretFunc) (*Claims, error) 
 	})
 	if err != nil {
 		return nil, err
+	}
+	// Tokens minted before subject types existed are admin tokens.
+	if claims.SubjectType == "" {
+		claims.SubjectType = SubjectAdmin
 	}
 	return claims, nil
 }

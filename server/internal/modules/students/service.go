@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"mime/multipart"
 
 	"tutorpilot/internal/pkg/address"
 	"tutorpilot/internal/pkg/httpx"
+	"tutorpilot/internal/pkg/mailer"
 	"tutorpilot/internal/pkg/pg"
+	"tutorpilot/internal/pkg/security"
 	"tutorpilot/internal/pkg/storage"
 )
 
@@ -18,18 +21,63 @@ type Service struct {
 	repo    *Repository
 	storage *storage.Storage
 	db      pg.Querier
+	mail    *mailer.Mailer
+	pepper  string
 }
 
-func NewService(repo *Repository, store *storage.Storage, db pg.Querier) *Service {
-	return &Service{repo: repo, storage: store, db: db}
+func NewService(repo *Repository, store *storage.Storage, db pg.Querier, mail *mailer.Mailer, pepper string) *Service {
+	return &Service{repo: repo, storage: store, db: db, mail: mail, pepper: pepper}
 }
 
-func (s *Service) Create(ctx context.Context, customerID, userID int, req CreateStudentRequest) (*StudentView, error) {
-	st, err := s.repo.Create(ctx, customerID, userID, req)
+// Create adds a student. A student is a login first: this generates a random
+// temporary password, hashes it the same way every other password is hashed,
+// and creates the dashboard_users + students rows in one transaction. The
+// temporary password is returned once, in CreatedStudent, and never again.
+func (s *Service) Create(ctx context.Context, customerID, userID int, req CreateStudentRequest) (*CreatedStudent, error) {
+	tempPassword, err := security.GenerateTempPassword()
 	if err != nil {
 		return nil, err
 	}
-	return s.view(ctx, customerID, st), nil
+	salt, err := security.NewSalt()
+	if err != nil {
+		return nil, err
+	}
+	hash, err := security.HashPassword(tempPassword, salt, s.pepper)
+	if err != nil {
+		return nil, err
+	}
+
+	st, err := s.repo.Create(ctx, customerID, userID, CreateInput{
+		CreateStudentRequest: req,
+		PasswordHash:         hash,
+		PasswordSalt:         salt,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.sendInvite(st.Email, st.FirstName, tempPassword)
+
+	return &CreatedStudent{StudentView: *s.view(ctx, customerID, st), TempPassword: tempPassword}, nil
+}
+
+// sendInvite emails the temporary password directly. A failure here is logged,
+// not returned: the login already exists and works, a bounced email must not
+// undo that — the admin can still hand the password over another way (it is
+// also in the Create response).
+func (s *Service) sendInvite(toEmail, name, tempPassword string) {
+	if s.mail == nil {
+		return
+	}
+	subject := "Your TutorPilot student account"
+	body := fmt.Sprintf(
+		"<p>Hi %s,</p><p>An account has been created for you on TutorPilot.</p>"+
+			"<p>Email: <strong>%s</strong><br>Temporary password: <strong>%s</strong></p>"+
+			"<p>Sign in and change your password when convenient.</p>",
+		name, toEmail, tempPassword)
+	if err := s.mail.Send(toEmail, subject, body); err != nil {
+		log.Printf("students: could not email invite to %s: %v", toEmail, err)
+	}
 }
 
 func (s *Service) List(ctx context.Context, customerID int, search string, p httpx.Page) (httpx.Paginated[StudentView], error) {

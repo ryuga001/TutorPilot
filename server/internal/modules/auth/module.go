@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,10 +46,17 @@ func (m *Module) RequirePrivilege(privilege string) gin.HandlerFunc {
 	return middleware.RequirePrivilege(m.svc.HasPrivilege, privilege)
 }
 
+// HasPrivilege lets a module make a privilege decision inside a handler rather
+// than as route middleware. The lecture module uses it to decide publish rights,
+// so a join token's grants follow the same role definitions as every other check.
+func (m *Module) HasPrivilege(ctx context.Context, userID, privilege string) (bool, error) {
+	return m.svc.HasPrivilege(ctx, userID, privilege)
+}
+
 func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	g := rg.Group("/auth")
 	{
-		// Email verification comes first, then tenant registration.
+		// Email verification comes first, then organization registration.
 		g.POST("/send-verification", m.handler.SendVerification)
 		g.POST("/resend-verification", m.handler.SendVerification) // alias
 		g.POST("/verify-email", m.handler.VerifyEmail)
@@ -60,6 +68,7 @@ func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 		g.POST("/reset-password", m.handler.ResetPassword)
 
 		g.POST("/logout", m.RequireAuth(), m.handler.Logout)
+		g.POST("/change-password", m.RequireAuth(), m.handler.ChangePassword)
 		g.GET("/me", m.RequireAuth(), m.handler.GetMe)
 		g.GET("/privileges", m.RequireAuth(), m.handler.GetPrivileges)
 	}

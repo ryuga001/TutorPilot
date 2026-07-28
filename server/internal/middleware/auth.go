@@ -19,14 +19,10 @@ const (
 	CtxRole       = "role"
 )
 
-// SecretResolver returns the signing secret for a tenant.
 type SecretResolver func(ctx context.Context, customerID int) ([]byte, error)
 
-// PrivilegeChecker reports whether a user holds a named privilege.
 type PrivilegeChecker func(ctx context.Context, userID, privilege string) (bool, error)
 
-// RequireAuth validates the bearer access token (verified against the tenant's
-// secret) and stores the identity on the context.
 func RequireAuth(jwtMgr *jwtutil.Manager, resolve SecretResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -56,7 +52,6 @@ func RequireAuth(jwtMgr *jwtutil.Manager, resolve SecretResolver) gin.HandlerFun
 	}
 }
 
-// RequirePrivilege gates a route on a named privilege. Must run after RequireAuth.
 func RequirePrivilege(check PrivilegeChecker, privilege string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetString(CtxUserID)
@@ -77,7 +72,6 @@ func RequirePrivilege(check PrivilegeChecker, privilege string) gin.HandlerFunc 
 	}
 }
 
-// CustomerID reads the authenticated tenant id from the context.
 func CustomerID(c *gin.Context) int {
 	v, _ := c.Get(CtxCustomerID)
 	switch id := v.(type) {

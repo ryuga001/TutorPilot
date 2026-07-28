@@ -45,7 +45,13 @@ func main() {
 	}
 	defer rdb.Close()
 
-	lkt := livekit.New(cfg.LiveKitURL, cfg.LiveKitKey, cfg.LiveKitSecret)
+	lkt := livekit.New(livekit.Options{
+		URL:             cfg.LiveKitURL,
+		APIKey:          cfg.LiveKitKey,
+		APISecret:       cfg.LiveKitSecret,
+		EmptyTimeout:    cfg.LiveKitRoomEmptyTimeout,
+		MaxParticipants: cfg.LiveKitMaxParticipants,
+	})
 
 	r := server.New(cfg, db, rdb, lkt)
 

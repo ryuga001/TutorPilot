@@ -9,6 +9,7 @@ import (
 
 	"tutorpilot/internal/middleware"
 	"tutorpilot/internal/pkg/httpx"
+	"tutorpilot/internal/pkg/scope"
 )
 
 type Handler struct {
@@ -21,14 +22,16 @@ func NewHandler(svc *Service) *Handler {
 	}
 }
 
-func (h *Handler) ids(c *gin.Context) (customerID, userID int) {
-	customerID = middleware.CustomerID(c)
-	userID, _ = strconv.Atoi(c.GetString(middleware.CtxUserID))
-	return
+// userID reads the caller's dashboard_users.id the same way every other module
+// does: middleware only exposes it as a raw context string (CtxUserID), there is
+// no centralized helper to parse it.
+func userID(c *gin.Context) int {
+	n, _ := strconv.Atoi(c.GetString(middleware.CtxUserID))
+	return n
 }
 
-func parseInt(c *gin.Context, key string) (int, bool) {
-	n, err := strconv.Atoi(c.Param(key))
+func lectureID(c *gin.Context) (int64, bool) {
+	n, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || n <= 0 {
 		return 0, false
 	}
@@ -39,11 +42,15 @@ func failErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpx.Fail(c, http.StatusNotFound, "not found")
+	case errors.Is(err, ErrInvalidTransition):
+		httpx.Fail(c, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrNotLive):
+		httpx.Fail(c, http.StatusConflict, err.Error())
+	case errors.Is(err, ErrNoRecording):
+		httpx.Fail(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, ErrLiveKitUnavailable):
+		httpx.Fail(c, http.StatusServiceUnavailable, err.Error())
 	default:
-		if err != nil {
-			httpx.Fail(c, http.StatusInternalServerError, err.Error())
-			return
-		}
 		httpx.Fail(c, http.StatusInternalServerError, "lecture operation failed")
 	}
 }
@@ -54,35 +61,30 @@ func (h *Handler) Create(c *gin.Context) {
 		httpx.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	customerID, userID := h.ids(c)
-	lecture, err := h.svc.Create(c.Request.Context(), customerID, userID, req)
+	l, err := h.svc.Create(c.Request.Context(), scope.FromContext(c), userID(c), req)
 	if err != nil {
 		failErr(c, err)
 		return
 	}
-	httpx.OK(c, http.StatusCreated, "lecture created", lecture)
+	httpx.OK(c, http.StatusCreated, "lecture created", l)
 }
 
 func (h *Handler) List(c *gin.Context) {
-	customerID, _ := h.ids(c)
-	p := httpx.ParsePage(c)
-
-	var batchID *int
-	if bVal := c.Query("batchId"); bVal != "" {
-		if val, err := strconv.Atoi(bVal); err == nil {
-			batchID = &val
+	f := ListLectureFilter{
+		Status: c.Query("status"),
+		Search: c.Query("search"),
+	}
+	raw := c.Query("batch_id")
+	if raw == "" {
+		raw = c.Query("batchId")
+	}
+	if raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			f.BatchID = &n
 		}
 	}
 
-	req := ListLectureRequest{
-		BatchID:  batchID,
-		Status:   c.Query("status"),
-		Search:   c.Query("search"),
-		Page:     p.Page,
-		PageSize: p.PageSize,
-	}
-
-	res, err := h.svc.List(c.Request.Context(), customerID, req)
+	res, err := h.svc.List(c.Request.Context(), scope.FromContext(c), f, httpx.ParsePage(c))
 	if err != nil {
 		failErr(c, err)
 		return
@@ -91,22 +93,21 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 func (h *Handler) Get(c *gin.Context) {
-	id, ok := parseInt(c, "id")
+	id, ok := lectureID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
 		return
 	}
-	customerID, _ := h.ids(c)
-	lecture, err := h.svc.Get(c.Request.Context(), customerID, id)
+	l, err := h.svc.Get(c.Request.Context(), scope.FromContext(c), userID(c), id)
 	if err != nil {
 		failErr(c, err)
 		return
 	}
-	httpx.OK(c, http.StatusOK, "ok", lecture)
+	httpx.OK(c, http.StatusOK, "ok", l)
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	id, ok := parseInt(c, "id")
+	id, ok := lectureID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
 		return
@@ -116,24 +117,21 @@ func (h *Handler) Update(c *gin.Context) {
 		httpx.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	customerID, _ := h.ids(c)
-	lecture, err := h.svc.Update(c.Request.Context(), customerID, id, req)
+	l, err := h.svc.Update(c.Request.Context(), scope.FromContext(c), id, req)
 	if err != nil {
 		failErr(c, err)
 		return
 	}
-	httpx.OK(c, http.StatusOK, "lecture updated", lecture)
+	httpx.OK(c, http.StatusOK, "lecture updated", l)
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	id, ok := parseInt(c, "id")
+	id, ok := lectureID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
 		return
 	}
-	customerID, _ := h.ids(c)
-	err := h.svc.Delete(c.Request.Context(), customerID, id)
-	if err != nil {
+	if err := h.svc.Delete(c.Request.Context(), scope.FromContext(c), id); err != nil {
 		failErr(c, err)
 		return
 	}
@@ -141,51 +139,85 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 func (h *Handler) Start(c *gin.Context) {
-	id, ok := parseInt(c, "id")
+	id, ok := lectureID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
 		return
 	}
-	customerID, _ := h.ids(c)
-	lecture, err := h.svc.Start(c.Request.Context(), customerID, id)
+	l, err := h.svc.Start(c.Request.Context(), scope.FromContext(c), id)
 	if err != nil {
 		failErr(c, err)
 		return
 	}
-	httpx.OK(c, http.StatusOK, "lecture started", lecture)
+	httpx.OK(c, http.StatusOK, "lecture started", l)
 }
 
 func (h *Handler) End(c *gin.Context) {
-	id, ok := parseInt(c, "id")
+	id, ok := lectureID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
 		return
 	}
-	customerID, _ := h.ids(c)
-	lecture, err := h.svc.End(c.Request.Context(), customerID, id)
+	l, err := h.svc.End(c.Request.Context(), scope.FromContext(c), id)
 	if err != nil {
 		failErr(c, err)
 		return
 	}
-	httpx.OK(c, http.StatusOK, "lecture ended", lecture)
+	httpx.OK(c, http.StatusOK, "lecture ended", l)
 }
 
-func (h *Handler) Join(c *gin.Context) {
-	id, ok := parseInt(c, "id")
+func (h *Handler) Cancel(c *gin.Context) {
+	id, ok := lectureID(c)
 	if !ok {
 		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
 		return
 	}
-	customerID, _ := h.ids(c)
-	userID := c.GetString(middleware.CtxUserID)
-	email := c.GetString(middleware.CtxEmail)
-	role := c.GetString(middleware.CtxRole)
-
-	token, err := h.svc.Join(c.Request.Context(), customerID, userID, email, role, id)
+	l, err := h.svc.Cancel(c.Request.Context(), scope.FromContext(c), id)
 	if err != nil {
-		httpx.Fail(c, http.StatusForbidden, err.Error())
+		failErr(c, err)
 		return
 	}
+	httpx.OK(c, http.StatusOK, "lecture cancelled", l)
+}
 
-	httpx.OK(c, http.StatusOK, "joined", gin.H{"token": token})
+func (h *Handler) Join(c *gin.Context) {
+	id, ok := lectureID(c)
+	if !ok {
+		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
+		return
+	}
+	res, err := h.svc.Join(c.Request.Context(), scope.FromContext(c), userID(c), id)
+	if err != nil {
+		failErr(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, "joined", res)
+}
+
+func (h *Handler) Attendance(c *gin.Context) {
+	id, ok := lectureID(c)
+	if !ok {
+		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
+		return
+	}
+	rows, err := h.svc.Attendance(c.Request.Context(), scope.FromContext(c), id)
+	if err != nil {
+		failErr(c, err)
+		return
+	}
+	httpx.OK(c, http.StatusOK, "ok", rows)
+}
+
+func (h *Handler) Recording(c *gin.Context) {
+	id, ok := lectureID(c)
+	if !ok {
+		httpx.Fail(c, http.StatusBadRequest, "invalid lecture id")
+		return
+	}
+	url, err := h.svc.RecordingURL(c.Request.Context(), scope.FromContext(c), id)
+	if err != nil {
+		failErr(c, err)
+		return
+	}
+	c.Redirect(http.StatusFound, url)
 }

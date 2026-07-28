@@ -14,6 +14,8 @@ import (
 
 	"tutorpilot/internal/modules/notification"
 	"tutorpilot/internal/pkg/httpx"
+	"tutorpilot/internal/pkg/mailer"
+	"tutorpilot/internal/pkg/security"
 	"tutorpilot/internal/pkg/storage"
 )
 
@@ -29,10 +31,12 @@ type Service struct {
 	repo     *Repository
 	storage  *storage.Storage
 	notifier *notification.Notifier
+	mail     *mailer.Mailer
+	pepper   string
 }
 
-func NewService(repo *Repository, store *storage.Storage, notifier *notification.Notifier) *Service {
-	return &Service{repo: repo, storage: store, notifier: notifier}
+func NewService(repo *Repository, store *storage.Storage, notifier *notification.Notifier, mail *mailer.Mailer, pepper string) *Service {
+	return &Service{repo: repo, storage: store, notifier: notifier, mail: mail, pepper: pepper}
 }
 
 func (s *Service) Create(ctx context.Context, customerID, userID, courseID int, name string) (*BatchView, error) {
@@ -257,8 +261,11 @@ func (s *Service) ImportStudentsCSV(ctx context.Context, customerID, batchID int
 		return nil, fmt.Errorf("CSV header must include first_name, last_name, and email columns")
 	}
 
-	valid := make([]StudentRow, 0)
+	valid := make([]ImportRow, 0)
 	skipped := make([]SkippedRow, 0)
+	// Emailed only for rows ImportStudents reports as newly created — a row that
+	// matches an existing student is re-enrolled, not reissued credentials.
+	tempPasswords := make(map[string]string)
 	rowNum := 1 // header is row 1
 
 	for {
@@ -292,14 +299,45 @@ func (s *Service) ImportStudentsCSV(ctx context.Context, customerID, batchID int
 			skipped = append(skipped, SkippedRow{Row: rowNum, Reason: "invalid email"})
 			continue
 		}
-		valid = append(valid, StudentRow{FirstName: first, LastName: last, Email: email, Phone: phone})
+
+		// A new login is generated for every row up front; ImportStudents discards
+		// it for rows that turn out to match an existing student.
+		tempPassword, err := security.GenerateTempPassword()
+		if err != nil {
+			return nil, err
+		}
+		salt, err := security.NewSalt()
+		if err != nil {
+			return nil, err
+		}
+		hash, err := security.HashPassword(tempPassword, salt, s.pepper)
+		if err != nil {
+			return nil, err
+		}
+		tempPasswords[email] = tempPassword
+
+		valid = append(valid, ImportRow{
+			StudentRow:   StudentRow{FirstName: first, LastName: last, Email: email, Phone: phone},
+			Row:          rowNum,
+			PasswordHash: hash,
+			PasswordSalt: salt,
+		})
 	}
 
 	imported := 0
 	if len(valid) > 0 {
-		imported, err = s.repo.ImportStudents(ctx, customerID, batchID, valid)
+		outcomes, repoSkipped, err := s.repo.ImportStudents(ctx, customerID, batchID, valid)
 		if err != nil {
 			return nil, err
+		}
+		skipped = append(skipped, repoSkipped...)
+		imported = len(outcomes)
+
+		for _, o := range outcomes {
+			if !o.Created {
+				continue
+			}
+			s.sendStudentInvite(o.Email, tempPasswords[o.Email])
 		}
 	}
 	if imported == 0 && len(skipped) == 0 {
@@ -307,6 +345,23 @@ func (s *Service) ImportStudentsCSV(ctx context.Context, customerID, batchID int
 	}
 
 	return &ImportResult{Imported: imported, Skipped: skipped}, nil
+}
+
+// sendStudentInvite emails a newly imported student's temporary password. A
+// failure here is logged, not returned: the login already exists and works.
+func (s *Service) sendStudentInvite(toEmail, tempPassword string) {
+	if s.mail == nil {
+		return
+	}
+	subject := "Your TutorPilot student account"
+	body := fmt.Sprintf(
+		"<p>An account has been created for you on TutorPilot.</p>"+
+			"<p>Email: <strong>%s</strong><br>Temporary password: <strong>%s</strong></p>"+
+			"<p>Sign in and change your password when convenient.</p>",
+		toEmail, tempPassword)
+	if err := s.mail.Send(toEmail, subject, body); err != nil {
+		log.Printf("batches: could not email import invite to %s: %v", toEmail, err)
+	}
 }
 
 func (s *Service) ListDrive(ctx context.Context, customerID, batchID int, parentID *int) ([]DriveNodeView, error) {
@@ -433,7 +488,8 @@ func (s *Service) view(ctx context.Context, b *Batch) (*BatchView, error) {
 func (s *Service) nodeView(n *DriveNode) DriveNodeView {
 	v := DriveNodeView{
 		ID: n.ID, ParentID: n.ParentID, Name: n.Name, Type: n.NodeType,
-		ContentType: n.ContentType, SizeBytes: n.SizeBytes, CreatedAt: n.CreatedAt,
+		ContentType: n.ContentType, SizeBytes: n.SizeBytes, IsSystem: n.IsSystem,
+		CreatedAt: n.CreatedAt,
 	}
 	if s.storage != nil && n.ObjectKey != nil && *n.ObjectKey != "" {
 		v.URL = s.storage.PublicURL(*n.ObjectKey)

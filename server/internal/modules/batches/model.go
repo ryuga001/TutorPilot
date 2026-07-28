@@ -12,7 +12,6 @@ const (
 	NodeFile   = "file"
 )
 
-
 type Batch struct {
 	ID          int
 	CustomerID  int
@@ -61,8 +60,12 @@ type DriveNode struct {
 	ObjectKey   *string
 	ContentType string
 	SizeBytes   int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// IsSystem marks a node the application creates and owns, such as the folder
+	// lecture recordings are filed into. Users may look inside but not rename or
+	// delete it.
+	IsSystem  bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // --- Public JSON views -------------------------------------------------------
@@ -112,6 +115,7 @@ type DriveNodeView struct {
 	URL         string    `json:"url,omitempty"`
 	ContentType string    `json:"content_type,omitempty"`
 	SizeBytes   int64     `json:"size_bytes,omitempty"`
+	IsSystem    bool      `json:"is_system,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

@@ -5,27 +5,38 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"tutorpilot/internal/modules/notification"
+	"tutorpilot/internal/pkg/mailer"
 	"tutorpilot/internal/pkg/storage"
 )
 
 type Module struct {
 	handler *Handler
+	repo    *Repository
 	deps    Deps
 }
 
 type Deps struct {
-	DB          *pgxpool.Pool
-	Storage     *storage.Storage
-	Notifier    *notification.Notifier
+	DB       *pgxpool.Pool
+	Storage  *storage.Storage
+	Notifier *notification.Notifier
+	// Mailer and Pepper are used to create a login for each newly imported
+	// student, the same way a single POST /students does.
+	Mailer      *mailer.Mailer
+	Pepper      string
 	RequireAuth func() gin.HandlerFunc
 	RequirePriv func(privilege string) gin.HandlerFunc
 }
 
 func New(d Deps) *Module {
 	repo := NewRepository(d.DB)
-	svc := NewService(repo, d.Storage, d.Notifier)
-	return &Module{handler: NewHandler(svc), deps: d}
+	svc := NewService(repo, d.Storage, d.Notifier, d.Mailer, d.Pepper)
+	return &Module{handler: NewHandler(svc), repo: repo, deps: d}
 }
+
+// DriveWriter exposes the drive writes the lecture module needs to file recordings.
+// The repository satisfies lecture.DriveWriter; returning it rather than the whole
+// repository keeps the surface to the two methods that are actually shared.
+func (m *Module) DriveWriter() *Repository { return m.repo }
 
 func (m *Module) RegisterRoutes(rg *gin.RouterGroup) {
 	g := rg.Group("/batches")

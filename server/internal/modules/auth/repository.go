@@ -3,10 +3,13 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"tutorpilot/internal/pkg/jwtutil"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -20,7 +23,9 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 }
 
 // roleSpec describes a role created for every new tenant and the privileges it
-// receives. It mirrors the grants seeded for the TutorPilot tenant.
+// receives. It mirrors the grants seeded for the TutorPilot tenant, and must stay
+// in step with migration 000012_tutor_student_dashboard_user_link, which
+// backfills the same roles onto tenants that already existed.
 type roleSpec struct {
 	name   string
 	typ    string
@@ -29,24 +34,61 @@ type roleSpec struct {
 	only   []string // or grant only these
 }
 
-var newTenantRoles = []roleSpec{
-	{name: "Admin", typ: "admin", all: true, except: []string{"manage_privileges"}},
-	{name: "User", typ: "user", only: []string{"view_dashboard"}},
+// The three portal roles are strictly nested: student ⊂ tutor ⊂ admin. Expressing
+// that by composition rather than three hand-written lists is what keeps the
+// invariant true — adding a student privilege cannot accidentally leave tutors
+// without it. Migration 000012 composes the same sets in SQL.
+
+// studentPrivileges is the base set: look at your own courses and batches, join
+// the lectures you are enrolled in, watch the recordings, edit your own profile.
+var studentPrivileges = []string{
+	"portal.access",
+	"self.profile.view", "self.profile.edit",
+	"course.view", "batch.view",
+	"lecture.view", "lecture.join", "recording.view",
 }
+
+// tutorOnlyPrivileges is what a tutor adds on top of a student: they run the
+// lectures rather than only attending them, and can see the roster and upload
+// material for the batches they teach.
+var tutorOnlyPrivileges = []string{
+	"view_dashboard", "student.view", "drive.upload",
+	"lecture.create", "lecture.edit", "lecture.control", "lecture.publish",
+}
+
+// tutorPrivileges is the student set plus the tutor additions. Building it by
+// concatenation rather than writing a third list is what guarantees the nesting.
+var tutorPrivileges = append(append([]string{}, studentPrivileges...), tutorOnlyPrivileges...)
+
+var newTenantRoles = []roleSpec{
+	{name: RoleNameAdmin, typ: "admin", all: true, except: []string{"manage_privileges"}},
+	{name: "User", typ: "user", only: []string{"view_dashboard"}},
+	{name: RoleNameTutor, typ: jwtutil.SubjectTutor, only: tutorPrivileges},
+	{name: RoleNameStudent, typ: jwtutil.SubjectStudent, only: studentPrivileges},
+}
+
+// Role names are stable per tenant, so provisioning can look a member's role up
+// by name rather than threading ids around.
+const (
+	RoleNameAdmin   = "Admin"
+	RoleNameTutor   = "Tutor"
+	RoleNameStudent = "Student"
+)
 
 const adminRoleType = "admin"
 
 const userSelect = `
 	SELECT du.id, du.customer_id, du.role_id, COALESCE(r.type, ''),
-	       du.email, du.password_hash, du.password_salt, du.created_at, c.first_name
+	       du.email, du.password_hash, du.password_salt,
+	       du.first_name, du.last_name, du.created_at
 	FROM dashboard_users du
-	JOIN customers c ON c.id = du.customer_id
 	LEFT JOIN roles r ON r.id = du.role_id`
 
 func scanUser(row pgx.Row) (*DashboardUser, error) {
 	u := &DashboardUser{}
 	err := row.Scan(&u.ID, &u.CustomerID, &u.RoleID, &u.RoleType,
-		&u.Email, &u.PasswordHash, &u.PasswordSalt, &u.CreatedAt, &u.FirstName)
+		&u.Email, &u.PasswordHash, &u.PasswordSalt,
+		&u.FirstName, &u.LastName, &u.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -56,18 +98,38 @@ func scanUser(row pgx.Row) (*DashboardUser, error) {
 	return u, nil
 }
 
+// GetUserByEmail is the only login lookup. Email is unique across the whole
+// installation (dashboard_users.email UNIQUE), so no tenant id is needed to find
+// the account — the account itself says which tenant it belongs to.
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*DashboardUser, error) {
-	return scanUser(r.db.QueryRow(ctx, userSelect+` WHERE du.email = $1`, email))
+	return scanUser(r.db.QueryRow(ctx, userSelect+` WHERE du.email = $1`, NormalizeEmail(email)))
 }
 
 func (r *Repository) GetUserByID(ctx context.Context, id int) (*DashboardUser, error) {
 	return scanUser(r.db.QueryRow(ctx, userSelect+` WHERE du.id = $1`, id))
 }
 
-func (r *Repository) UpdatePassword(ctx context.Context, userID int, passwordHash string) error {
-	const q = `UPDATE dashboard_users SET password_hash = $1 WHERE id = $2`
-	_, err := r.db.Exec(ctx, q, passwordHash, userID)
-	return err
+// EmailTaken reports whether an address is already registered, for a friendly
+// pre-flight message before signup goes further. The UNIQUE constraint on
+// dashboard_users.email is what actually enforces it.
+func (r *Repository) EmailTaken(ctx context.Context, email string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM dashboard_users WHERE email = $1)`,
+		NormalizeEmail(email)).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) SetPassword(ctx context.Context, userID int, passwordHash string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE dashboard_users SET password_hash = $2 WHERE id = $1`, userID, passwordHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) GetCustomerJWTSecret(ctx context.Context, customerID int) (string, error) {
@@ -79,6 +141,7 @@ func (r *Repository) GetCustomerJWTSecret(ctx context.Context, customerID int) (
 	return secret, err
 }
 
+// GetUserPrivileges returns the privilege names a user holds.
 func (r *Repository) GetUserPrivileges(ctx context.Context, userID int) ([]string, error) {
 	const q = `
 		SELECT p.name
@@ -148,11 +211,12 @@ func (r *Repository) CreateTenantWithAdmin(
 		RoleType:   adminRoleType,
 		Email:      email,
 		FirstName:  firstName,
+		LastName:   lastName,
 	}
 	err = tx.QueryRow(ctx,
-		`INSERT INTO dashboard_users (customer_id, role_id, email, password_hash, password_salt)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-		customerID, adminRoleID, email, passwordHash, salt,
+		`INSERT INTO dashboard_users (customer_id, role_id, email, password_hash, password_salt, first_name, last_name)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
+		customerID, adminRoleID, email, passwordHash, salt, firstName, lastName,
 	).Scan(&user.ID, &user.CreatedAt)
 	if err != nil {
 		return nil, mapConstraintErr(err)
@@ -162,6 +226,13 @@ func (r *Repository) CreateTenantWithAdmin(
 		return nil, err
 	}
 	return user, nil
+}
+
+// NormalizeEmail is applied on every write and lookup. dashboard_users.email is a
+// plain UNIQUE constraint, which is case-sensitive, so the case-insensitive
+// guarantee has to come from here.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func grantPrivileges(ctx context.Context, tx pgx.Tx, roleID int, spec roleSpec) error {

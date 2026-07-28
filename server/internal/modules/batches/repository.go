@@ -7,11 +7,21 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"tutorpilot/internal/pkg/pg"
 )
 
 var (
 	ErrNotFound  = errors.New("not found")
 	ErrNameTaken = errors.New("a file or folder with this name already exists here")
+
+	// ErrSystemNode guards folders the application created and manages, such as
+	// the one lecture recordings are filed into.
+	ErrSystemNode = errors.New("this folder is managed automatically and cannot be changed")
+
+	// ErrNoStudentRole means the tenant has no 'Student' role to assign an
+	// imported student's login to (see migration 000012).
+	ErrNoStudentRole = errors.New("this organization has no Student role configured")
 )
 
 type Repository struct {
@@ -36,7 +46,6 @@ func scanBatch(row pgx.Row) (*Batch, error) {
 	}
 	return b, nil
 }
-
 
 func (r *Repository) CreateBatch(ctx context.Context, customerID, createdBy, courseID int, name string) (*Batch, error) {
 	var exists bool
@@ -118,13 +127,17 @@ func (r *Repository) DeleteBatch(ctx context.Context, customerID, id int) error 
 }
 
 func (r *Repository) LoadModuleAssignments(ctx context.Context, batchID, courseID int) ([]ModuleAssignment, error) {
+	// A tutor's name lives on dashboard_users now (see migration 000012);
+	// tutors.id was replaced by tutors.dashboard_user_id, which is what
+	// batch_module_tutors.tutor_id references.
 	const q = `
 		SELECT cm.id, cm.title, cm.position,
-		       bmt.tutor_id, t.first_name, t.last_name, t.email,
+		       bmt.tutor_id, tdu.first_name, tdu.last_name, tdu.email,
 		       bmt.start_date, bmt.expected_end_date
 		FROM course_modules cm
 		LEFT JOIN batch_module_tutors bmt ON bmt.course_module_id = cm.id AND bmt.batch_id = $1
-		LEFT JOIN tutors t ON t.id = bmt.tutor_id
+		LEFT JOIN tutors t ON t.dashboard_user_id = bmt.tutor_id
+		LEFT JOIN dashboard_users tdu ON tdu.id = t.dashboard_user_id
 		WHERE cm.course_id = $2
 		ORDER BY cm.position, cm.id`
 	rows, err := r.db.Query(ctx, q, batchID, courseID)
@@ -163,7 +176,11 @@ func (r *Repository) AssignModuleTutor(ctx context.Context, customerID, batchID,
 		return ErrNotFound
 	}
 	if err := tx.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM tutors WHERE id = $1 AND customer_id = $2)`,
+		`SELECT EXISTS(
+			SELECT 1 FROM tutors t
+			JOIN dashboard_users du ON du.id = t.dashboard_user_id
+			WHERE t.dashboard_user_id = $1 AND du.customer_id = $2
+		)`,
 		tutorID, customerID).Scan(&exists); err != nil {
 		return err
 	}
@@ -245,10 +262,13 @@ func pruneBatchTutor(ctx context.Context, tx pgx.Tx, batchID, tutorID int) error
 }
 
 func (r *Repository) LoadTutors(ctx context.Context, batchID int) ([]TutorSummary, error) {
+	// A tutor's name lives on dashboard_users now (see migration 000012).
 	const q = `
-		SELECT t.id, t.first_name, t.last_name, t.email
-		FROM batch_tutors bt JOIN tutors t ON t.id = bt.tutor_id
-		WHERE bt.batch_id = $1 ORDER BY t.first_name, t.last_name`
+		SELECT t.dashboard_user_id, du.first_name, du.last_name, du.email
+		FROM batch_tutors bt
+		JOIN tutors t ON t.dashboard_user_id = bt.tutor_id
+		JOIN dashboard_users du ON du.id = t.dashboard_user_id
+		WHERE bt.batch_id = $1 ORDER BY du.first_name, du.last_name`
 	rows, err := r.db.Query(ctx, q, batchID)
 	if err != nil {
 		return nil, err
@@ -292,9 +312,12 @@ func (r *Repository) LoadStudents(ctx context.Context, batchID, limit, offset in
 	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM batch_students WHERE batch_id = $1`, batchID).Scan(&total); err != nil {
 		return nil, 0, err
 	}
+	// A student's name lives on dashboard_users now (see migration 000012).
 	const q = `
-		SELECT s.id, s.first_name, s.last_name, s.email, s.phone_no
-		FROM batch_students bs JOIN students s ON s.id = bs.student_id
+		SELECT s.dashboard_user_id, du.first_name, du.last_name, du.email, s.phone_no
+		FROM batch_students bs
+		JOIN students s ON s.dashboard_user_id = bs.student_id
+		JOIN dashboard_users du ON du.id = s.dashboard_user_id
 		WHERE bs.batch_id = $1 ORDER BY bs.enrolled_at DESC
 		LIMIT $2 OFFSET $3`
 	rows, err := r.db.Query(ctx, q, batchID, limit, offset)
@@ -315,9 +338,11 @@ func (r *Repository) LoadStudents(ctx context.Context, batchID, limit, offset in
 
 func (r *Repository) LoadAllStudents(ctx context.Context, batchID int) ([]StudentSummary, error) {
 	const q = `
-		SELECT s.id, s.first_name, s.last_name, s.email, s.phone_no
-		FROM batch_students bs JOIN students s ON s.id = bs.student_id
-		WHERE bs.batch_id = $1 ORDER BY s.first_name, s.last_name`
+		SELECT s.dashboard_user_id, du.first_name, du.last_name, du.email, s.phone_no
+		FROM batch_students bs
+		JOIN students s ON s.dashboard_user_id = bs.student_id
+		JOIN dashboard_users du ON du.id = s.dashboard_user_id
+		WHERE bs.batch_id = $1 ORDER BY du.first_name, du.last_name`
 	rows, err := r.db.Query(ctx, q, batchID)
 	if err != nil {
 		return nil, err
@@ -346,7 +371,11 @@ func (r *Repository) EnrollStudentIDs(ctx context.Context, customerID, batchID i
 	for _, sid := range studentIDs {
 		var exists bool
 		if err := tx.QueryRow(ctx,
-			`SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND customer_id = $2)`,
+			`SELECT EXISTS(
+				SELECT 1 FROM students s
+				JOIN dashboard_users du ON du.id = s.dashboard_user_id
+				WHERE s.dashboard_user_id = $1 AND du.customer_id = $2
+			)`,
 			sid, customerID).Scan(&exists); err != nil {
 			return 0, nil, err
 		}
@@ -386,50 +415,133 @@ type StudentRow struct {
 	Phone     string
 }
 
-func (r *Repository) ImportStudents(ctx context.Context, customerID, batchID int, rows []StudentRow) (int, error) {
+// ImportRow is one CSV row ready to persist: the service has already generated
+// and hashed a temporary password for it, exactly as a single Create does.
+type ImportRow struct {
+	StudentRow
+	Row          int // original CSV row number, echoed back on skip
+	PasswordHash string
+	PasswordSalt string
+}
+
+// ImportOutcome reports what happened to one row that was not skipped.
+// Created is false when the row matched an existing student in this
+// organization and was just re-enrolled/updated — no new login, no email to send.
+type ImportOutcome struct {
+	Email   string
+	Created bool
+}
+
+// ImportStudents creates a login for each new student (matching the single
+// Create flow) and enrolls everyone in the batch. A row whose email already
+// belongs to a different organization, or to an account in this organization
+// that isn't a student, is skipped rather than silently repurposed.
+func (r *Repository) ImportStudents(
+	ctx context.Context,
+	customerID, batchID int,
+	rows []ImportRow,
+) ([]ImportOutcome, []SkippedRow, error) {
 	if len(rows) == 0 {
-		return 0, nil
+		return nil, nil, nil
 	}
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return nil, nil, err
 	}
 	defer tx.Rollback(ctx)
 
+	var roleID int
+	err = tx.QueryRow(ctx,
+		`SELECT id FROM roles WHERE customer_id = $1 AND name = 'Student'`, customerID,
+	).Scan(&roleID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil, ErrNoStudentRole
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	outcomes := make([]ImportOutcome, 0, len(rows))
+	var skipped []SkippedRow
+
 	for _, row := range rows {
-		var studentID int
-		err := tx.QueryRow(ctx, `
-			INSERT INTO students (customer_id, first_name, last_name, email, phone_no)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (customer_id, email) DO UPDATE SET
-				first_name = EXCLUDED.first_name,
-				last_name = EXCLUDED.last_name,
-				phone_no = EXCLUDED.phone_no,
-				updated_at = now()
-			RETURNING id`,
-			customerID, row.FirstName, row.LastName, row.Email, row.Phone).Scan(&studentID)
-		if err != nil {
-			return 0, err
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO batch_students (batch_id, student_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-			batchID, studentID); err != nil {
-			return 0, err
+		var existingID, existingCustomerID int
+		err := tx.QueryRow(ctx,
+			`SELECT id, customer_id FROM dashboard_users WHERE email = $1`, row.Email,
+		).Scan(&existingID, &existingCustomerID)
+
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			var newID int
+			if err := tx.QueryRow(ctx,
+				`INSERT INTO dashboard_users
+					(customer_id, role_id, email, password_hash, password_salt, first_name, last_name)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+				customerID, roleID, row.Email, row.PasswordHash, row.PasswordSalt, row.FirstName, row.LastName,
+			).Scan(&newID); err != nil {
+				return nil, nil, err
+			}
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO students (dashboard_user_id, phone_no) VALUES ($1, $2)`,
+				newID, row.Phone); err != nil {
+				return nil, nil, err
+			}
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO batch_students (batch_id, student_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+				batchID, newID); err != nil {
+				return nil, nil, err
+			}
+			outcomes = append(outcomes, ImportOutcome{Email: row.Email, Created: true})
+
+		case err != nil:
+			return nil, nil, err
+
+		default:
+			if existingCustomerID != customerID {
+				skipped = append(skipped, SkippedRow{Row: row.Row, Reason: "email already belongs to a different organization"})
+				continue
+			}
+			var isStudent bool
+			if err := tx.QueryRow(ctx,
+				`SELECT EXISTS(SELECT 1 FROM students WHERE dashboard_user_id = $1)`, existingID,
+			).Scan(&isStudent); err != nil {
+				return nil, nil, err
+			}
+			if !isStudent {
+				skipped = append(skipped, SkippedRow{Row: row.Row, Reason: "email belongs to an existing account that is not a student"})
+				continue
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE dashboard_users SET first_name = $2, last_name = $3 WHERE id = $1`,
+				existingID, row.FirstName, row.LastName); err != nil {
+				return nil, nil, err
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE students SET phone_no = $2, updated_at = now() WHERE dashboard_user_id = $1`,
+				existingID, row.Phone); err != nil {
+				return nil, nil, err
+			}
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO batch_students (batch_id, student_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+				batchID, existingID); err != nil {
+				return nil, nil, err
+			}
+			outcomes = append(outcomes, ImportOutcome{Email: row.Email, Created: false})
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, err
+		return nil, nil, err
 	}
-	return len(rows), nil
+	return outcomes, skipped, nil
 }
 
-const driveCols = `id, batch_id, parent_id, name, node_type, object_key, content_type, size_bytes, created_at, updated_at`
+const driveCols = `id, batch_id, parent_id, name, node_type, object_key, content_type, size_bytes, is_system, created_at, updated_at`
 
 func scanNode(row pgx.Row) (*DriveNode, error) {
 	n := &DriveNode{}
 	err := row.Scan(&n.ID, &n.BatchID, &n.ParentID, &n.Name, &n.NodeType,
-		&n.ObjectKey, &n.ContentType, &n.SizeBytes, &n.CreatedAt, &n.UpdatedAt)
+		&n.ObjectKey, &n.ContentType, &n.SizeBytes, &n.IsSystem, &n.CreatedAt, &n.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -437,6 +549,71 @@ func scanNode(row pgx.Row) (*DriveNode, error) {
 		return nil, err
 	}
 	return n, nil
+}
+
+// --- Drive writes for the lecture recording pipeline -------------------------
+//
+// Recordings land in the batch drive, so the lecture module needs to create nodes.
+// These take a pg.Querier rather than using the pool directly, so the caller can
+// run them inside its own transaction alongside the lectures update.
+
+// EnsureFolder returns the id of a folder, creating it if absent. Concurrent
+// deliveries of the same webhook both end up with the same folder rather than two.
+func (r *Repository) EnsureFolder(
+	ctx context.Context,
+	q pg.Querier,
+	batchID int,
+	parentID *int,
+	name string,
+	isSystem bool,
+) (int, error) {
+	if q == nil {
+		q = r.db
+	}
+
+	var id int
+	err := q.QueryRow(ctx, `
+		SELECT id FROM batch_drive_nodes
+		WHERE batch_id = $1
+		  AND ((parent_id IS NULL AND $2::int IS NULL) OR parent_id = $2)
+		  AND lower(name) = lower($3)
+		  AND node_type = '`+NodeFolder+`'`,
+		batchID, parentID, name).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
+
+	err = q.QueryRow(ctx, `
+		INSERT INTO batch_drive_nodes (batch_id, parent_id, name, node_type, is_system)
+		VALUES ($1, $2, $3, '`+NodeFolder+`', $4)
+		RETURNING id`,
+		batchID, parentID, name, isSystem).Scan(&id)
+	return id, err
+}
+
+// InsertFile adds a file node for an object already written to storage.
+func (r *Repository) InsertFile(
+	ctx context.Context,
+	q pg.Querier,
+	batchID int,
+	parentID *int,
+	name, objectKey, contentType string,
+	sizeBytes int64,
+) (int, error) {
+	if q == nil {
+		q = r.db
+	}
+	var id int
+	err := q.QueryRow(ctx, `
+		INSERT INTO batch_drive_nodes
+			(batch_id, parent_id, name, node_type, object_key, content_type, size_bytes)
+		VALUES ($1, $2, $3, '`+NodeFile+`', $4, $5, $6)
+		RETURNING id`,
+		batchID, parentID, name, objectKey, contentType, sizeBytes).Scan(&id)
+	return id, err
 }
 
 func (r *Repository) nameTaken(ctx context.Context, batchID int, parentID *int, name string, excludeID int) (bool, error) {
@@ -539,6 +716,9 @@ func (r *Repository) RenameNode(ctx context.Context, batchID, nodeID int, name s
 	if err != nil {
 		return nil, err
 	}
+	if current.IsSystem {
+		return nil, ErrSystemNode
+	}
 	taken, err := r.nameTaken(ctx, batchID, current.ParentID, name, nodeID)
 	if err != nil {
 		return nil, err
@@ -552,6 +732,14 @@ func (r *Repository) RenameNode(ctx context.Context, batchID, nodeID int, name s
 }
 
 func (r *Repository) DeleteNode(ctx context.Context, batchID, nodeID int) ([]string, error) {
+	current, err := r.GetNode(ctx, batchID, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	if current.IsSystem {
+		return nil, ErrSystemNode
+	}
+
 	const subtreeQ = `
 		WITH RECURSIVE subtree AS (
 			SELECT id, node_type, object_key FROM batch_drive_nodes WHERE id = $1 AND batch_id = $2
@@ -564,6 +752,7 @@ func (r *Repository) DeleteNode(ctx context.Context, batchID, nodeID int) ([]str
 	if err != nil {
 		return nil, err
 	}
+	//nolint:staticcheck // rows is closed explicitly below, before the DELETE runs.
 	keys := make([]string, 0)
 	for rows.Next() {
 		var k string
