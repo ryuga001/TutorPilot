@@ -122,6 +122,7 @@ export function PersonFormDrawer({
                     <img
                       src={profileImageUrl}
                       alt=""
+                      decoding="async"
                       className="h-full w-full object-cover"
                     />
                   ) : (

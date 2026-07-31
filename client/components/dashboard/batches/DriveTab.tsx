@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,6 +57,7 @@ function toastErr(err: unknown) {
 }
 
 export function DriveTab({ batchId, canEdit }: { batchId: number; canEdit: boolean }) {
+  const confirm = useConfirm();
   const [path, setPath] = useState<Crumb[]>([]);
   const parentId = path.length > 0 ? path[path.length - 1].id : undefined;
 
@@ -115,7 +117,11 @@ export function DriveTab({ batchId, canEdit }: { batchId: number; canEdit: boole
 
   async function handleDelete(node: DriveNode) {
     const label = node.type === "folder" ? "this folder and everything inside it" : node.name;
-    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete ${label}?`,
+      description: "This cannot be undone.",
+    });
+    if (!ok) return;
     try {
       await deleteNode({ batchId, nodeId: node.id }).unwrap();
       toast.success("Deleted");

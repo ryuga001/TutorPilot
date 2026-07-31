@@ -109,6 +109,7 @@ function LecturesPageContent() {
 
   return (
     <PageTheme
+      icon={Video}
       title="Lectures"
       subtitle="Schedule sessions, run them live, and find their recordings in the batch drive."
     >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, PlusCircle, Trash2, User } from "lucide-react";
+import { Pencil, PlusCircle, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
@@ -12,6 +12,7 @@ import {
 } from "@/components/dashboard/people/PersonFormDrawer";
 import { CredentialsDialog } from "@/components/dashboard/people/CredentialsDialog";
 import PageTheme from "@/components/pagetheme/PageTheme";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/table/DataTable";
 import {
@@ -22,6 +23,7 @@ import {
   useUploadTutorProfileImageMutation,
 } from "@/lib/api/tutorsApi";
 import { apiErrorMessage } from "@/lib/api-error";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useCan } from "@/lib/hooks/useCan";
 import type { Tutor } from "@/lib/types";
 
@@ -33,6 +35,7 @@ function toastErr(err: unknown) {
 
 function TutorsList() {
   const can = useCan();
+  const confirm = useConfirm();
   const canCreate = can("tutor.create");
   const canEdit = can("tutor.edit");
   const canDelete = can("tutor.delete");
@@ -111,7 +114,11 @@ function TutorsList() {
   }
 
   async function handleDelete(t: Tutor) {
-    if (!window.confirm(`Delete ${t.first_name} ${t.last_name}?`)) return;
+    const ok = await confirm({
+      title: `Delete ${t.first_name} ${t.last_name}?`,
+      description: "This cannot be undone.",
+    });
+    if (!ok) return;
     try {
       await deleteTutor(t.id).unwrap();
       toast.success("Tutor deleted");
@@ -122,31 +129,20 @@ function TutorsList() {
 
   const columns: Column<Tutor>[] = [
     {
-      key: "avatar",
-      header: "",
-      headerClassName: "w-0",
-      cell: (t) => (
-        <div className="flex h-8 w-8 items-center justify-center overflow-hidden border bg-muted">
-          {t.profile_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={t.profile_image_url}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <User className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
-      ),
-    },
-    {
       key: "name",
       header: "Name",
       cell: (t) => (
-        <span className="font-medium">
-          {t.first_name} {t.last_name}
-        </span>
+        <div className="flex items-center gap-3">
+          <Avatar className="h-8 w-8">
+            {t.profile_image_url && <AvatarImage src={t.profile_image_url} alt="" />}
+            <AvatarFallback>
+              {(t.first_name?.[0] ?? t.email[0] ?? "?").toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="font-medium">
+            {t.first_name} {t.last_name}
+          </span>
+        </div>
       ),
     },
     { key: "email", header: "Email", cell: (t) => t.email },
@@ -191,14 +187,15 @@ function TutorsList() {
   ];
 
   return (
-    <PageTheme title="Tutors" subtitle="Manage your organization's tutors.">
+    <PageTheme icon={Users} title="Tutors" subtitle="Manage your organization's tutors.">
       <DataTable
         columns={columns}
         data={items}
         getRowId={(t) => t.id}
         isLoading={isLoading}
         isFetching={isFetching}
-        emptyMessage="No tutors found."
+        emptyMessage="No tutors found"
+        emptyDescription="Add your first tutor to get started."
         searchPlaceholder="Search by name or email…"
         manualPagination
         searchValue={search}

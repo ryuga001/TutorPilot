@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, PlusCircle, Trash2, User } from "lucide-react";
+import { GraduationCap, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
@@ -12,6 +12,7 @@ import {
 } from "@/components/dashboard/people/PersonFormDrawer";
 import { CredentialsDialog } from "@/components/dashboard/people/CredentialsDialog";
 import PageTheme from "@/components/pagetheme/PageTheme";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/table/DataTable";
 import {
@@ -22,6 +23,7 @@ import {
   useUploadStudentProfileImageMutation,
 } from "@/lib/api/studentsApi";
 import { apiErrorMessage } from "@/lib/api-error";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useCan } from "@/lib/hooks/useCan";
 import type { Student } from "@/lib/types";
 
@@ -33,6 +35,7 @@ function toastErr(err: unknown) {
 
 function StudentsList() {
   const can = useCan();
+  const confirm = useConfirm();
   const canCreate = can("student.create");
   const canEdit = can("student.edit");
   const canDelete = can("student.delete");
@@ -111,7 +114,11 @@ function StudentsList() {
   }
 
   async function handleDelete(s: Student) {
-    if (!window.confirm(`Delete ${s.first_name} ${s.last_name}?`)) return;
+    const ok = await confirm({
+      title: `Delete ${s.first_name} ${s.last_name}?`,
+      description: "This cannot be undone.",
+    });
+    if (!ok) return;
     try {
       await deleteStudent(s.id).unwrap();
       toast.success("Student deleted");
@@ -122,31 +129,20 @@ function StudentsList() {
 
   const columns: Column<Student>[] = [
     {
-      key: "avatar",
-      header: "",
-      headerClassName: "w-0",
-      cell: (s) => (
-        <div className="flex h-8 w-8 items-center justify-center overflow-hidden border bg-muted">
-          {s.profile_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={s.profile_image_url}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <User className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
-      ),
-    },
-    {
       key: "name",
       header: "Name",
       cell: (s) => (
-        <span className="font-medium">
-          {s.first_name} {s.last_name}
-        </span>
+        <div className="flex items-center gap-3">
+          <Avatar className="h-8 w-8">
+            {s.profile_image_url && <AvatarImage src={s.profile_image_url} alt="" />}
+            <AvatarFallback>
+              {(s.first_name?.[0] ?? s.email[0] ?? "?").toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="font-medium">
+            {s.first_name} {s.last_name}
+          </span>
+        </div>
       ),
     },
     { key: "email", header: "Email", cell: (s) => s.email },
@@ -186,14 +182,15 @@ function StudentsList() {
   ];
 
   return (
-    <PageTheme title="Students" subtitle="Manage your organization's students.">
+    <PageTheme icon={GraduationCap} title="Students" subtitle="Manage your organization's students.">
       <DataTable
         columns={columns}
         data={items}
         getRowId={(s) => s.id}
         isLoading={isLoading}
         isFetching={isFetching}
-        emptyMessage="No students found."
+        emptyMessage="No students found"
+        emptyDescription="Add your first student to get started."
         searchPlaceholder="Search by name or email…"
         manualPagination
         searchValue={search}

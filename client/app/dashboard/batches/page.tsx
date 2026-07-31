@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CalendarDays } from "lucide-react";
 
 import { RequirePrivilege } from "@/components/auth/RequirePrivilege";
 import { CreateBatchDialog } from "@/components/dashboard/batches/CreateBatchDialog";
@@ -79,7 +80,7 @@ function BatchesList() {
   ];
 
   return (
-    <PageTheme title="Batches" subtitle="Every scheduled offering, across all courses.">
+    <PageTheme icon={CalendarDays} title="Batches" subtitle="Every scheduled offering, across all courses.">
       <DataTable
         columns={columns}
         data={items}

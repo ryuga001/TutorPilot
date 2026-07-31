@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { AssignTutorDialog } from "@/components/dashboard/batches/AssignTutorDialog";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { Button } from "@/components/ui/button";
 import { useUnassignTutorMutation } from "@/lib/api/batchesApi";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -13,13 +14,19 @@ import type { Batch } from "@/lib/types";
 
 export function ModulesTutorsTab({ batch, canEdit }: { batch: Batch; canEdit: boolean }) {
   const modules = batch.modules ?? [];
+  const confirm = useConfirm();
   const [assigningModuleId, setAssigningModuleId] = useState<number | null>(null);
   const [unassignTutor, { isLoading: unassigning }] = useUnassignTutorMutation();
 
   const assigning = modules.find((m) => m.course_module_id === assigningModuleId);
 
   async function handleUnassign(moduleId: number) {
-    if (!window.confirm("Unassign this module's tutor?")) return;
+    const ok = await confirm({
+      title: "Unassign this module's tutor?",
+      destructive: false,
+      confirmLabel: "Unassign",
+    });
+    if (!ok) return;
     try {
       await unassignTutor({ batchId: batch.id, moduleId }).unwrap();
       toast.success("Tutor unassigned");

@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Inbox, Loader2, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/layout/EmptyState";
 import {
   Table,
   TableBody,
@@ -21,6 +24,9 @@ export interface Column<T> {
   cell: (row: T) => ReactNode;
   className?: string;
   headerClassName?: string;
+  /** Excluded from the stacked mobile-card fallback (e.g. a redundant avatar
+   *  column already folded into the title line). Defaults to included. */
+  hideOnMobileCard?: boolean;
 }
 
 export interface DataTableProps<T> {
@@ -57,9 +63,40 @@ export interface DataTableProps<T> {
 
   isLoading?: boolean;
   emptyMessage?: string;
+  emptyDescription?: string;
+  emptyAction?: ReactNode;
 
   getRowId?: (row: T, index: number) => string | number;
   onRowClick?: (row: T) => void;
+}
+
+function SkeletonRows({ columnCount, rowCount = 6 }: { columnCount: number; rowCount?: number }) {
+  return (
+    <>
+      {Array.from({ length: rowCount }).map((_, i) => (
+        <TableRow key={i}>
+          {Array.from({ length: columnCount }).map((__, j) => (
+            <TableCell key={j}>
+              <Skeleton className="h-4 w-full max-w-40" />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+function SkeletonCards({ count = 4 }: { count?: number }) {
+  return (
+    <div className="space-y-3 sm:hidden">
+      {Array.from({ length: count }).map((_, i) => (
+        <Card key={i} className="space-y-2 p-4">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-3 w-1/2" />
+        </Card>
+      ))}
+    </div>
+  );
 }
 
 export function DataTable<T>({
@@ -79,7 +116,9 @@ export function DataTable<T>({
   isFetching = false,
   pageSize = 10,
   isLoading = false,
-  emptyMessage = "No results.",
+  emptyMessage = "No results",
+  emptyDescription,
+  emptyAction,
   getRowId,
   onRowClick,
 }: DataTableProps<T>) {
@@ -113,6 +152,7 @@ export function DataTable<T>({
   const start = manualPagination ? 0 : safePage * pageSize;
   const rows = manualPagination ? data : filtered.slice(start, start + pageSize);
   const total = manualPagination ? totalItems ?? data.length : filtered.length;
+  const isEmpty = !isLoading && rows.length === 0;
 
   function handleSearchChange(value: string) {
     if (manualPagination) {
@@ -131,6 +171,8 @@ export function DataTable<T>({
     }
   }
 
+  const cardColumns = columns.filter((c) => !c.hideOnMobileCard);
+
   return (
     <div className="space-y-3">
       {(searchable || toolbar) && (
@@ -143,6 +185,7 @@ export function DataTable<T>({
                 onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder={searchPlaceholder}
                 className="pl-8"
+                aria-label={searchPlaceholder}
               />
             </div>
           ) : (
@@ -152,10 +195,50 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="border">
+      {/* Small screens: a stacked card per row instead of a cramped table. */}
+      {isLoading ? (
+        <SkeletonCards />
+      ) : isEmpty ? (
+        <div className="sm:hidden">
+          <EmptyState icon={Inbox} title={emptyMessage} description={emptyDescription} action={emptyAction} />
+        </div>
+      ) : (
+        <div className="space-y-2 sm:hidden" role="list">
+          {rows.map((row, i) => (
+            <Card
+              key={getRowId ? getRowId(row, start + i) : start + i}
+              role="listitem"
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={cn(
+                "space-y-1.5 p-4 transition-colors",
+                onRowClick && "cursor-pointer active:bg-accent",
+              )}
+            >
+              {cardColumns.map((c, ci) => (
+                <div
+                  key={c.key}
+                  className={cn(
+                    ci === 0
+                      ? "font-medium"
+                      : "flex items-center justify-between gap-3 text-sm text-muted-foreground",
+                  )}
+                >
+                  {ci !== 0 && typeof c.header === "string" && (
+                    <span>{c.header}</span>
+                  )}
+                  <span className={cn(ci !== 0 && "text-foreground")}>{c.cell(row)}</span>
+                </div>
+              ))}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* sm and up: the full table. */}
+      <div className="hidden overflow-hidden rounded-lg border shadow-soft sm:block">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               {columns.map((c) => (
                 <TableHead key={c.key} className={c.headerClassName}>
                   {c.header}
@@ -165,21 +248,17 @@ export function DataTable<T>({
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-                </TableCell>
-              </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  {emptyMessage}
+              <SkeletonRows columnCount={columns.length} />
+            ) : isEmpty ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columns.length} className="p-0">
+                  <EmptyState
+                    icon={Inbox}
+                    title={emptyMessage}
+                    description={emptyDescription}
+                    action={emptyAction}
+                    className="border-none"
+                  />
                 </TableCell>
               </TableRow>
             ) : (

@@ -79,6 +79,8 @@ export function CourseDetailsTab({
           <img
             src={course.thumbnail_url}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="max-h-64 w-full border object-cover"
           />
         )}

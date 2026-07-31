@@ -13,6 +13,8 @@ export function CourseCard({ course }: { course: Course }) {
             <img
               src={course.thumbnail_url}
               alt={course.title}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover"
             />
           ) : (

@@ -20,11 +20,13 @@ import {
 } from "@/lib/api/batchesApi";
 import { useGetCourseQuery } from "@/lib/api/coursesApi";
 import { apiErrorMessage } from "@/lib/api-error";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useCan } from "@/lib/hooks/useCan";
 
 function BatchDetail({ id }: { id: number }) {
   const router = useRouter();
   const can = useCan();
+  const confirm = useConfirm();
   const canEdit = can("batch.edit");
   const canDelete = can("batch.delete");
 
@@ -64,7 +66,11 @@ function BatchDetail({ id }: { id: number }) {
   }
 
   async function remove() {
-    if (!window.confirm("Delete this batch? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete this batch?",
+      description: "This cannot be undone.",
+    });
+    if (!ok) return;
     try {
       await deleteBatch(id).unwrap();
       toast.success("Batch deleted");

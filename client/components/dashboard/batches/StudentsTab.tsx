@@ -7,6 +7,7 @@ import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 
 import { EnrollStudentsDrawer } from "@/components/dashboard/batches/EnrollStudentsDrawer";
 import { ImportStudentsDialog } from "@/components/dashboard/batches/ImportStudentsDialog";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/table/DataTable";
 import {
@@ -19,6 +20,7 @@ import type { StudentSummary } from "@/lib/types";
 const PAGE_SIZE = 20;
 
 export function StudentsTab({ batchId, canEdit }: { batchId: number; canEdit: boolean }) {
+  const confirm = useConfirm();
   const [page, setPage] = useState(1);
   const { data, isLoading, isFetching } = useListBatchStudentsQuery({
     batchId,
@@ -32,7 +34,11 @@ export function StudentsTab({ batchId, canEdit }: { batchId: number; canEdit: bo
   const items = data?.items ?? [];
 
   async function handleRemove(s: StudentSummary) {
-    if (!window.confirm(`Remove ${s.first_name} ${s.last_name} from this batch?`)) return;
+    const ok = await confirm({
+      title: `Remove ${s.first_name} ${s.last_name} from this batch?`,
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
     try {
       await removeStudent({ batchId, studentId: s.id }).unwrap();
       toast.success("Student removed");

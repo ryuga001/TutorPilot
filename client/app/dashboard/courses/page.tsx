@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 
 import { RequirePrivilege } from "@/components/auth/RequirePrivilege";
 import { CourseCard } from "@/components/dashboard/courses/CourseCard";
@@ -30,6 +30,7 @@ function CoursesList() {
 
   return (
     <PageTheme
+      icon={BookOpen}
       title="Courses"
       subtitle="Create and manage your organization's courses."
     >

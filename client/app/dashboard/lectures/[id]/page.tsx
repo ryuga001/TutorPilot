@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -18,7 +19,6 @@ import { toast } from "sonner";
 import { RequirePrivilege } from "@/components/auth/RequirePrivilege";
 import PageTheme from "@/components/pagetheme/PageTheme";
 import { AttendanceTable } from "@/components/dashboard/lectures/AttendanceTable";
-import { LiveRoom } from "@/components/dashboard/lectures/LiveRoom";
 import { RecordingPanel } from "@/components/dashboard/lectures/RecordingPanel";
 import {
   LectureStatusBadge,
@@ -35,6 +35,15 @@ import {
   useStartLectureMutation,
 } from "@/lib/api/lecturesApi";
 import { useCan } from "@/lib/hooks/useCan";
+import { PageLoader } from "@/components/layout/PageLoader";
+
+// LiveKit's client is a large webrtc/video bundle that only matters once
+// someone actually joins a room, so it is kept out of this page's initial
+// JS entirely and fetched on demand.
+const LiveRoom = dynamic(
+  () => import("@/components/dashboard/lectures/LiveRoom").then((m) => m.LiveRoom),
+  { ssr: false, loading: () => <PageLoader label="Connecting to the room…" /> },
+);
 
 function LectureDetailContent() {
   const params = useParams<{ id: string }>();

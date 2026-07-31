@@ -19,11 +19,13 @@ import {
   useSetCoursePublishedMutation,
 } from "@/lib/api/coursesApi";
 import { apiErrorMessage } from "@/lib/api-error";
+import { useConfirm } from "@/components/providers/confirm-provider";
 import { useCan } from "@/lib/hooks/useCan";
 
 function CourseDetail({ id }: { id: number }) {
   const router = useRouter();
   const can = useCan();
+  const confirm = useConfirm();
   const canEdit = can("course.edit");
   const canDelete = can("course.delete");
   const { data: course, isLoading, error } = useGetCourseQuery(id);
@@ -59,7 +61,11 @@ function CourseDetail({ id }: { id: number }) {
   }
 
   async function remove() {
-    if (!window.confirm("Delete this course? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete this course?",
+      description: "This cannot be undone.",
+    });
+    if (!ok) return;
     try {
       await deleteCourse(id).unwrap();
       toast.success("Course deleted");
