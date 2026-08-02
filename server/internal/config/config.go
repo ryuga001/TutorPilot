@@ -32,6 +32,8 @@ type Config struct {
 	InviteTTL    time.Duration
 	AppVerifyURL string
 
+	AppSignInURL string
+
 	MinIOEndpoint  string
 	MinIOAccessKey string
 	MinIOSecretKey string
@@ -47,6 +49,26 @@ type Config struct {
 	LiveKitMaxParticipants  int
 
 	LectureJoinTokenTTL time.Duration
+
+	RelayEnabled       bool
+	OutboxPollInterval time.Duration
+	OutboxBatchSize    int
+
+	EventStreamNotifications string
+	EventStreamAuth          string
+	EventConsumerGroup       string
+
+	EventRetentionNotifications time.Duration
+	EventRetentionAuth          time.Duration
+
+	WorkerConcurrency  int
+	WorkerMaxAttempts  int
+	WorkerClaimMinIdle time.Duration
+	WorkerPort         string
+
+	SMTPTimeout time.Duration
+
+	ImportMaxRows int
 }
 
 func Load() (*Config, error) {
@@ -62,6 +84,7 @@ func Load() (*Config, error) {
 		SMTPPort:           getEnv("SMTP_PORT", "1025"),
 		SMTPFrom:           getEnv("SMTP_FROM", "TutorPilot <no-reply@tutorpilot.ai>"),
 		AppVerifyURL:       getEnv("APP_VERIFY_URL", "http://localhost:8080/verify-email"),
+		AppSignInURL:       getEnv("APP_SIGN_IN_URL", "http://localhost:3000/login"),
 		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "*")),
 
 		MinIOEndpoint:  getEnv("MINIO_ENDPOINT", "localhost:9000"),
@@ -75,6 +98,19 @@ func Load() (*Config, error) {
 		LiveKitKey:             getEnv("LIVEKIT_API_KEY", "tutorpilot"),
 		LiveKitSecret:          getEnv("LIVEKIT_API_SECRET", "tutorpilot"),
 		LiveKitMaxParticipants: getInt("LIVEKIT_MAX_PARTICIPANTS", 100),
+
+		RelayEnabled:    getBool("RELAY_ENABLED", true),
+		OutboxBatchSize: getInt("OUTBOX_BATCH_SIZE", 100),
+
+		EventStreamNotifications: getEnv("EVENT_STREAM_NOTIFICATIONS", "tutorpilot:events:notifications"),
+		EventStreamAuth:          getEnv("EVENT_STREAM_AUTH", "tutorpilot:events:auth"),
+		EventConsumerGroup:       getEnv("EVENT_CONSUMER_GROUP", "notification-workers"),
+
+		WorkerConcurrency: getInt("WORKER_CONCURRENCY", 4),
+		WorkerMaxAttempts: getInt("WORKER_MAX_ATTEMPTS", 5),
+		WorkerPort:        getEnv("WORKER_PORT", "8081"),
+
+		ImportMaxRows: getInt("IMPORT_MAX_ROWS", 1000),
 	}
 
 	var err error
@@ -97,11 +133,38 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	if cfg.OutboxPollInterval, err = getDuration("OUTBOX_POLL_INTERVAL", time.Second); err != nil {
+		return nil, err
+	}
+	if cfg.EventRetentionNotifications, err = getDuration("EVENT_RETENTION_NOTIFICATIONS", 24*time.Hour); err != nil {
+		return nil, err
+	}
+	if cfg.EventRetentionAuth, err = getDuration("EVENT_RETENTION_AUTH", time.Hour); err != nil {
+		return nil, err
+	}
+	if cfg.WorkerClaimMinIdle, err = getDuration("WORKER_CLAIM_MIN_IDLE", 5*time.Minute); err != nil {
+		return nil, err
+	}
+	if cfg.SMTPTimeout, err = getDuration("SMTP_TIMEOUT", 10*time.Second); err != nil {
+		return nil, err
+	}
+
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 	if cfg.PasswordPepper == "" {
 		return nil, fmt.Errorf("PASSWORD_PEPPER is required")
+	}
+
+	if cfg.SMTPTimeout >= cfg.WorkerClaimMinIdle/2 {
+		return nil, fmt.Errorf(
+			"SMTP_TIMEOUT (%s) must be less than half WORKER_CLAIM_MIN_IDLE (%s): a send outlasting the reclaim window causes duplicate emails",
+			cfg.SMTPTimeout, cfg.WorkerClaimMinIdle)
+	}
+
+	if cfg.EventRetentionAuth < time.Minute || cfg.EventRetentionNotifications < time.Minute {
+		return nil, fmt.Errorf("event retention must be at least 1m (auth=%s, notifications=%s)",
+			cfg.EventRetentionAuth, cfg.EventRetentionNotifications)
 	}
 
 	return cfg, nil

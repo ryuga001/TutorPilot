@@ -1,5 +1,5 @@
-.PHONY: help setup tidy run build test swagger migrate-up migrate-down migrate-version \
-        infra-up infra-down infra-logs new-migration
+.PHONY: help setup tidy run run-worker build test swagger migrate-up migrate-down migrate-version \
+        infra-up infra-down infra-logs new-migration dlq
 
 ifneq (,$(wildcard .env))
 	include .env
@@ -20,8 +20,12 @@ tidy:
 run:
 	go run ./cmd/api
 
+run-worker:
+	go run ./cmd/worker
+
 build:
 	go build -o bin/api ./cmd/api
+	go build -o bin/worker ./cmd/worker
 
 test:
 	go test ./...
@@ -44,6 +48,9 @@ new-migration:
 	touch migrations/$${ts}_$(name).up.sql migrations/$${ts}_$(name).down.sql; \
 	echo "created migrations/$${ts}_$(name).{up,down}.sql"
 
+
+dlq:
+	@psql "$(DATABASE_URL)" -c "SELECT event_id, event_type, attempts, failed_at, last_error FROM dead_events WHERE replayed_at IS NULL ORDER BY failed_at DESC LIMIT 50;"
 
 infra-up:
 	docker compose up -d

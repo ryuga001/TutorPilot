@@ -3,21 +3,19 @@ package server
 import (
 	"log"
 	"net/http"
-	"tutorpilot/internal/livekit"
+	"tutorpilot/internal/modules/admin/livekit"
 
 	"tutorpilot/internal/config"
 	"tutorpilot/internal/middleware"
-	"tutorpilot/internal/modules/auth"
-	"tutorpilot/internal/modules/batches"
-	"tutorpilot/internal/modules/courses"
-	"tutorpilot/internal/modules/lecture"
-	"tutorpilot/internal/modules/notification"
-	"tutorpilot/internal/modules/students"
-	"tutorpilot/internal/modules/tutors"
-	"tutorpilot/internal/modules/webhooks"
+	batches "tutorpilot/internal/modules/admin/module/batches"
+	courses "tutorpilot/internal/modules/admin/module/courses"
+	lecture "tutorpilot/internal/modules/admin/module/lecture"
+	students "tutorpilot/internal/modules/admin/module/students"
+	tutors "tutorpilot/internal/modules/admin/module/tutors"
+	webhooks "tutorpilot/internal/modules/admin/module/webhooks"
+	"tutorpilot/internal/modules/admin/storage"
+	auth "tutorpilot/internal/modules/auth/module"
 	"tutorpilot/internal/pkg/jwtutil"
-	"tutorpilot/internal/pkg/mailer"
-	"tutorpilot/internal/pkg/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,17 +33,6 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, lkt *livekit.L
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS(cfg.CORSAllowedOrigins))
 
 	jwtMgr := jwtutil.New(cfg.JWTAccessTTL)
-	mail := mailer.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
-	templates := notification.NewTemplateStore(db)
-	notifier := notification.New(mail, templates, notification.Config{
-		VerifyURL: cfg.AppVerifyURL,
-		// Tutors/students no longer go through this notifier's invite templates
-		// (see tutors/students Service.sendInvite, which emails the temporary
-		// password directly), so a portal link template is not needed here.
-		OTPTTL:         cfg.OTPTTL,
-		InviteTTL:      cfg.InviteTTL,
-		SystemTenantID: notification.SystemTenantID,
-	})
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -59,16 +46,13 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, lkt *livekit.L
 		DB:         db,
 		Redis:      rdb,
 		JWT:        jwtMgr,
-		Notifier:   notifier,
 		Pepper:     cfg.PasswordPepper,
 		RefreshTTL: cfg.JWTRefreshTTL,
 		OTPTTL:     cfg.OTPTTL,
+		Stream:     cfg.EventStreamAuth,
+		VerifyURL:  cfg.AppVerifyURL,
 	})
 
-	// No host-based tenant resolution: the organization's subdomain is cosmetic
-	// at the HTTP layer, handled entirely by middleware.CORS allowing the
-	// wildcard origin. Every principal (admin, tutor, student) resolves the same
-	// way, by customer_id on their dashboard_users row.
 	api := r.Group("/api/v1")
 
 	authModule.RegisterRoutes(api)
@@ -87,14 +71,12 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, lkt *livekit.L
 	})
 	coursesModule.RegisterRoutes(api)
 
-	// Creating a tutor or student also creates the dashboard_users login they
-	// sign in with (see tutors/students Repository.Create), so each module needs
-	// the password pepper and a mailer to send the temporary credentials.
 	tutorsModule := tutors.New(tutors.Deps{
 		DB:          db,
 		Storage:     store,
-		Mailer:      mail,
 		Pepper:      cfg.PasswordPepper,
+		SignInURL:   cfg.AppSignInURL,
+		Stream:      cfg.EventStreamNotifications,
 		RequireAuth: authModule.RequireAuth,
 		RequirePriv: authModule.RequirePrivilege,
 	})
@@ -103,21 +85,23 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, lkt *livekit.L
 	studentsModule := students.New(students.Deps{
 		DB:          db,
 		Storage:     store,
-		Mailer:      mail,
 		Pepper:      cfg.PasswordPepper,
+		SignInURL:   cfg.AppSignInURL,
+		Stream:      cfg.EventStreamNotifications,
 		RequireAuth: authModule.RequireAuth,
 		RequirePriv: authModule.RequirePrivilege,
 	})
 	studentsModule.RegisterRoutes(api)
 
 	batchesModule := batches.New(batches.Deps{
-		DB:          db,
-		Storage:     store,
-		Notifier:    notifier,
-		Mailer:      mail,
-		Pepper:      cfg.PasswordPepper,
-		RequireAuth: authModule.RequireAuth,
-		RequirePriv: authModule.RequirePrivilege,
+		DB:            db,
+		Storage:       store,
+		Pepper:        cfg.PasswordPepper,
+		SignInURL:     cfg.AppSignInURL,
+		Stream:        cfg.EventStreamNotifications,
+		ImportMaxRows: cfg.ImportMaxRows,
+		RequireAuth:   authModule.RequireAuth,
+		RequirePriv:   authModule.RequirePrivilege,
 	})
 	batchesModule.RegisterRoutes(api)
 
@@ -131,15 +115,11 @@ func New(cfg *config.Config, db *pgxpool.Pool, rdb *redis.Client, lkt *livekit.L
 		RequirePriv:  authModule.RequirePrivilege,
 	})
 
-	// Recordings are filed into the batch drive, which the batches module owns, so
-	// the lecture service borrows just the two writes it needs.
 	if store != nil {
 		lecturesModule.Service().SetDrive(batchesModule.DriveWriter(), store.PublicURL)
 	}
 	lecturesModule.RegisterRoutes(api)
 
-	// LiveKit's callbacks: they carry a signed token rather than a user session, so
-	// they sit outside RequireAuth.
 	webhooks.New(webhooks.Deps{
 		Lectures:  lecturesModule.Service(),
 		APIKey:    cfg.LiveKitKey,

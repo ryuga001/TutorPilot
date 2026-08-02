@@ -1,10 +1,11 @@
 package notification
 
 const (
-	tmplEmailVerification      = "email_verification"
-	tmplPasswordReset          = "password_reset"
-	tmplBatchTutorAssignment   = "batch_tutor_assignment"
-	tmplBatchStudentEnrollment = "batch_student_enrollment"
-	tmplMemberInvite           = "member_invite"
-	tmplMemberCredentialsReset = "member_credentials_reset"
+	TmplEmailVerification      = "email_verification"
+	TmplPasswordReset          = "password_reset"
+	TmplBatchTutorAssignment   = "batch_tutor_assignment"
+	TmplBatchStudentEnrollment = "batch_student_enrollment"
+	TmplMemberInvite           = "member_invite"
+
+	TmplMemberCredentialsReset = "member_credentials_reset"
 )

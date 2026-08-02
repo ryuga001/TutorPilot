@@ -7,25 +7,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
-	"tutorpilot/internal/livekit"
+	"tutorpilot/internal/modules/admin/livekit"
 
 	"tutorpilot/internal/config"
-	"tutorpilot/internal/database"
-	"tutorpilot/internal/redisclient"
+	"tutorpilot/internal/pkg/database"
+	"tutorpilot/internal/pkg/outbox"
+	"tutorpilot/internal/pkg/redisclient"
 	"tutorpilot/internal/server"
 )
 
-// @title           TutorPilot
-// @version         1.0
-// @description     Backend for TutorPilot — authentication & notifications.
-// @BasePath        /api/v1
-// @schemes         http https
-// @securityDefinitions.apikey  BearerAuth
-// @in                          header
-// @name                        Authorization
-// @description.BearerAuth      Type "Bearer" followed by a space and your access token.
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -55,6 +48,26 @@ func main() {
 
 	r := server.New(cfg, db, rdb, lkt)
 
+	relayCtx, stopRelay := context.WithCancel(context.Background())
+	var relayWG sync.WaitGroup
+	if cfg.RelayEnabled {
+		relay := outbox.NewRelay(db, rdb, outbox.RelayConfig{
+			PollInterval: cfg.OutboxPollInterval,
+			BatchSize:    cfg.OutboxBatchSize,
+			Retention: map[string]time.Duration{
+				cfg.EventStreamNotifications: cfg.EventRetentionNotifications,
+				cfg.EventStreamAuth:          cfg.EventRetentionAuth,
+			},
+		})
+		relayWG.Add(1)
+		go func() {
+			defer relayWG.Done()
+			relay.Run(relayCtx)
+		}()
+	} else {
+		log.Println("outbox relay: disabled (RELAY_ENABLED=false)")
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,
 		Handler:           r,
@@ -76,7 +89,11 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("forced shutdown: %v", err)
+		log.Printf("forced shutdown: %v", err)
 	}
+
+	stopRelay()
+	relayWG.Wait()
+
 	log.Println("server stopped")
 }
